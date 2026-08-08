@@ -6,14 +6,6 @@ const SIZE_MAX_W = 7680;
 const SIZE_MAX_H = 4320;
 const MAX_RECORD_MS = 10 * 60 * 1000; // 单次录制上限 10 分钟
 
-// 内置预设（与 PRD 定稿一致）
-const BUILTIN_PRESETS = [
-  { name: 'iPhone 14 Pro', w: 393, h: 852 },
-  { name: 'iPad Mini', w: 768, h: 1024 },
-  { name: 'HD', w: 1280, h: 720 },
-  { name: 'Full HD', w: 1920, h: 1080 }
-];
-
 // 默认预设顺序（v1.3 起 HD / Full HD 置顶），作为未自定义排序时的初始列表
 const DEFAULT_PRESETS = [
   { name: 'HD', w: 1280, h: 720 },
@@ -21,6 +13,9 @@ const DEFAULT_PRESETS = [
   { name: 'iPhone 14 Pro', w: 393, h: 852 },
   { name: 'iPad Mini', w: 768, h: 1024 }
 ];
+
+// 兼容旧测试：BUILTIN_PRESETS 已合并至 DEFAULT_PRESETS，保留别名避免外部引用报错
+const BUILTIN_PRESETS = DEFAULT_PRESETS;
 
 /**
  * 锁定预设：仅 HD 不可删除/重命名（v1.3 需求）
@@ -60,7 +55,7 @@ function normalizePresets(stored, legacyCustom) {
  * 校验自定义尺寸。返回 { ok, reason }
  */
 function validateSize(w, h) {
-  if (w === '' || h === '' || w == null || h == null) {
+  if (w === '' || h === '' || w === null || w === undefined || h === null || h === undefined) {
     return { ok: false, reason: '请输入宽度和高度' };
   }
   const wn = Number(w), hn = Number(h);
@@ -95,12 +90,16 @@ function isRestrictedUrl(url) {
  */
 function sanitizeTitle(title, maxLen) {
   maxLen = maxLen || 50;
-  const safe = String(title || '')
+  let safe = String(title || '')
     .replace(/[\\/:*?"<>|\u0000-\u001f]/g, '')
     .replace(/\s+/g, ' ')
     .trim()
     .slice(0, maxLen)
     .trim();
+  // Windows 不允许文件名以空格或点结尾
+  safe = safe.replace(/[. ]+$/g, '');
+  // 保留名 CON/PRN/AUX/NUL/COM1-9/LPT1-9 按文件系统会冲突，统一回退
+  if (/^(CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])$/i.test(safe)) safe = '';
   return safe || 'recording';
 }
 

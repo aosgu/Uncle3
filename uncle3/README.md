@@ -42,7 +42,7 @@
 
 ```
 uncle3/
-├── manifest.json      MV3 清单（权限：windows/tabs/tabCapture/storage/offscreen）
+├── manifest.json      MV3 清单（权限：windows/activeTab/tabCapture/storage/offscreen）
 ├── core.js            共享纯逻辑（校验、命名、时间格式化、mimeType 选择）
 ├── background.js      Service Worker：录制会话状态机、徽标
 ├── offscreen.html/js  Offscreen Document：getUserMedia + MediaRecorder 录制执行体，并以 <a download> 直接导出

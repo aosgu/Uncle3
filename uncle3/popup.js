@@ -261,9 +261,15 @@ async function startRecording() {
   }
 }
 
-function togglePause() {
-  // 根据当前显示文案判断状态
-  const paused = $('pauseBtn').textContent === '继续';
+async function togglePause() {
+  // 以后台真实会话状态为准，避免依赖 UI 文案（i18n/文案改动即崩）
+  let paused = $('pauseBtn').textContent === '继续';
+  try {
+    const resp = await bgSend({ type: 'getState' });
+    if (resp && resp.ok && resp.session) {
+      paused = resp.session.state === 'paused';
+    }
+  } catch (e) { /* 降级用按钮文案 */ }
   bgSend({ type: paused ? 'resumeSession' : 'pauseSession' }).then(pollRecordState);
 }
 
