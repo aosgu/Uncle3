@@ -1,0 +1,31 @@
+{
+  "manifest_version": 3,
+  "name": "Uncle3",
+  "version": "1.3.0",
+  "description": "窗口尺寸一键调整 + 录制当前页面导出 MP4",
+  "minimum_chrome_version": "116",
+  "permissions": [
+    "windows",
+    "tabs",
+    "tabCapture",
+    "storage",
+    "offscreen"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "Uncle3"
+  },
+  "options_ui": {
+    "page": "settings.html",
+    "open_in_tab": true
+  },
+  "icons": {
+    "16": "icons/icon16.png",
+    "32": "icons/icon32.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  }
+}
