@@ -35,9 +35,8 @@ async function restoreSession() {
     if (session) return;
     if (data && data.session) {
       session = data.session;
-      if (session.state === 'recording') setBadge(fmtBadge(session.elapsedMs || 0));
-      else if (session.state === 'paused') setBadge(fmtBadge(session.elapsedMs || 0), '#f59e0b');
-      else if (session.state === 'encoding') clearBadge();
+      restoreBadge(session);
+      notifyPopup();
     }
   } catch (e) { /* 忽略 */ }
 }
@@ -68,6 +67,17 @@ async function closeOffscreen(force) {
       await chrome.offscreen.closeDocument();
     }
   } catch (e) { /* 忽略 */ }
+}
+
+function notifyPopup() {
+  try { chrome.runtime.sendMessage({ type: 'STATE_UPDATE', session }); } catch (e) {}
+}
+
+function restoreBadge(s) {
+  if (!s) return;
+  if (s.state === 'recording') setBadge(fmtBadge(s.elapsedMs || 0));
+  else if (s.state === 'paused') setBadge(fmtBadge(s.elapsedMs || 0), '#f59e0b');
+  else if (s.state === 'encoding') clearBadge();
 }
 
 function setBadge(text, color) {
@@ -105,8 +115,7 @@ async function handleMessage(msg) {
           const data = await chrome.storage.session.get('session');
           if (data && data.session) {
             session = data.session;
-            if (session.state === 'recording') setBadge(fmtBadge(session.elapsedMs || 0));
-            else if (session.state === 'paused') setBadge(fmtBadge(session.elapsedMs || 0), '#f59e0b');
+            restoreBadge(session);
           }
         } catch (e) {}
       }
@@ -137,11 +146,13 @@ async function handleMessage(msg) {
         // 的 finalize，关闭会中断其导出；让旧会话的 STOPPED → cleanup 自行回收。
         if (!resp || !resp.ok) {
           clearBadge();
+      notifyPopup();
           return { ok: false, error: '录制启动失败：' + ((resp && resp.error) || '未知错误') };
         }
       } catch (e) {
         // 发送失败即录制文档不可用（崩溃/被回收）：不留残留会话，清理后返回错误
         clearBadge();
+      notifyPopup();
         await closeOffscreen();
         return { ok: false, error: '录制启动失败：' + errMsg(e) };
       }
@@ -153,6 +164,7 @@ async function handleMessage(msg) {
         limitReached: false
       };
       persistSession();
+      notifyPopup();
       return { ok: true };
     }
 
@@ -166,6 +178,7 @@ async function handleMessage(msg) {
       session.state = 'paused';
       setBadge(fmtBadge(session.elapsedMs), '#f59e0b');
       persistSession();
+      notifyPopup();
       return { ok: true };
     }
 
@@ -179,6 +192,7 @@ async function handleMessage(msg) {
       session.state = 'recording';
       setBadge(fmtBadge(session.elapsedMs));
       persistSession();
+      notifyPopup();
       return { ok: true };
     }
 
@@ -188,7 +202,9 @@ async function handleMessage(msg) {
       }
       session.state = 'encoding';
       clearBadge();
+      notifyPopup();
       persistSession();
+      notifyPopup();
       try {
         await chrome.runtime.sendMessage({ type: 'OFF_STOP' });
       } catch (e) {
@@ -201,7 +217,9 @@ async function handleMessage(msg) {
     case 'clearSession': {
       session = null;
       clearBadge();
+      notifyPopup();
       persistSession();
+      notifyPopup();
       // 先通知 offscreen 丢弃并停止可能仍在进行的录制（如看门狗降级 error 后用户关闭时
       // 文档仍活着的情况），避免残留录制器/媒体流/tick 定时器占用 offscreen，
       // 否则后续 OFF_START 会一直「录制器忙」。文档已死时该消息发送失败，忽略即可。
@@ -237,7 +255,9 @@ function onStopped(msg, sendResponse) {
   if (!msg.ok || !msg.fileName) {
     session = { state: 'error', reason: msg.error || '录制失败' };
     clearBadge();
+      notifyPopup();
     persistSession();
+      notifyPopup();
     cleanup();
     return;
   }
@@ -247,7 +267,9 @@ function onStopped(msg, sendResponse) {
   session.fileName = msg.fileName;
   session.state = 'done';
   clearBadge();
+      notifyPopup();
   persistSession();
+      notifyPopup();
   cleanup();
 }
 
@@ -255,7 +277,9 @@ function onRecError(msg, sendResponse) {
   sendResponse({ ok: true });
   session = { state: 'error', reason: msg.error || '录制失败' };
   clearBadge();
+      notifyPopup();
   persistSession();
+      notifyPopup();
   cleanup();
 }
 
@@ -283,8 +307,10 @@ function cancelPendingClose() {
 function onOffscreenDead(err) {
   session = { state: 'error', reason: '录制文档已丢失，请关闭后重试' };
   clearBadge();
+      notifyPopup();
   cancelPendingClose();
   persistSession();
+      notifyPopup();
   closeOffscreen();
   return { ok: false, error: '操作失败：' + errMsg(err) };
 }
