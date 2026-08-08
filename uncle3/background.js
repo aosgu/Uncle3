@@ -15,6 +15,36 @@ let session = null;
 let closingOffscreen = false;
 let closeTimer = null; // 延迟关闭 offscreen 的定时器句柄（可取消，防竞态）
 
+// ---------- session 持久化（MV3 Service Worker 可能被系统回收） ----------
+
+let persistTimer = null;
+async function persistSession() {
+  if (!chrome.storage || !chrome.storage.session) return;
+  try {
+    if (session) await chrome.storage.session.set({ session });
+    else await chrome.storage.session.remove('session');
+  } catch (e) { /* 忽略：session storage 不可用时降级为内存 */ }
+}
+function schedulePersist() {
+  if (persistTimer) return;
+  persistTimer = setTimeout(() => { persistTimer = null; persistSession(); }, 300);
+}
+async function restoreSession() {
+  if (!chrome.storage || !chrome.storage.session) return;
+  try {
+    const data = await chrome.storage.session.get('session');
+    if (data && data.session) {
+      session = data.session;
+      // 恢复徽标（SW 重启后保持与原会话一致）
+      if (session.state === 'recording') setBadge(fmtBadge(session.elapsedMs || 0));
+      else if (session.state === 'paused') setBadge(fmtBadge(session.elapsedMs || 0), '#f59e0b');
+      else if (session.state === 'encoding') clearBadge();
+    }
+  } catch (e) { /* 忽略 */ }
+}
+// 启动时尝试恢复（不阻塞后续消息处理）
+restoreSession();
+
 // ---------- offscreen 管理 ----------
 
 async function ensureOffscreen() {
@@ -71,8 +101,20 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
 
 async function handleMessage(msg) {
   switch (msg.type) {
-    case 'getState':
+    case 'getState': {
+      // SW 可能被系统回收后重启，内存 session 丢失但 storage.session 仍有快照，延迟恢复
+      if (!session && chrome.storage && chrome.storage.session) {
+        try {
+          const data = await chrome.storage.session.get('session');
+          if (data && data.session) {
+            session = data.session;
+            if (session.state === 'recording') setBadge(fmtBadge(session.elapsedMs || 0));
+            else if (session.state === 'paused') setBadge(fmtBadge(session.elapsedMs || 0), '#f59e0b');
+          }
+        } catch (e) {}
+      }
       return { ok: true, session, maxMs: MAX_RECORD_MS };
+    }
 
     case 'startSession': {
       if (session && (session.state === 'recording' || session.state === 'paused')) {
@@ -104,6 +146,7 @@ async function handleMessage(msg) {
         elapsedMs: 0,
         limitReached: false
       };
+      persistSession();
       return { ok: true };
     }
 
@@ -116,6 +159,7 @@ async function handleMessage(msg) {
       }
       session.state = 'paused';
       setBadge(fmtBadge(session.elapsedMs), '#f59e0b');
+      persistSession();
       return { ok: true };
     }
 
@@ -128,6 +172,7 @@ async function handleMessage(msg) {
       }
       session.state = 'recording';
       setBadge(fmtBadge(session.elapsedMs));
+      persistSession();
       return { ok: true };
     }
 
@@ -137,6 +182,7 @@ async function handleMessage(msg) {
       }
       session.state = 'encoding';
       clearBadge();
+      persistSession();
       try {
         await chrome.runtime.sendMessage({ type: 'OFF_STOP' });
       } catch (e) {
@@ -149,6 +195,7 @@ async function handleMessage(msg) {
     case 'clearSession': {
       session = null;
       clearBadge();
+      persistSession();
       closeOffscreen();
       return { ok: true };
     }
@@ -165,6 +212,7 @@ function onTime(msg, sendResponse) {
   // 仅活跃会话接受计时上报，避免残留定时器的 TIME 污染 error/done 会话
   if (session.state === 'recording' || session.state === 'paused') {
     session.elapsedMs = msg.ms || 0;
+    schedulePersist();
   }
   if (session.state === 'recording') setBadge(fmtBadge(session.elapsedMs));
   sendResponse({ ok: true });
@@ -179,6 +227,7 @@ function onStopped(msg, sendResponse) {
   if (!msg.ok || !msg.fileName) {
     session = { state: 'error', reason: msg.error || '录制失败' };
     clearBadge();
+    persistSession();
     cleanup();
     return;
   }
@@ -188,6 +237,7 @@ function onStopped(msg, sendResponse) {
   session.fileName = msg.fileName;
   session.state = 'done';
   clearBadge();
+  persistSession();
   cleanup();
 }
 
@@ -195,6 +245,7 @@ function onRecError(msg, sendResponse) {
   sendResponse({ ok: true });
   session = { state: 'error', reason: msg.error || '录制失败' };
   clearBadge();
+  persistSession();
   cleanup();
 }
 
@@ -223,6 +274,7 @@ function onOffscreenDead(err) {
   session = { state: 'error', reason: '录制文档已丢失，请关闭后重试' };
   clearBadge();
   cancelPendingClose();
+  persistSession();
   closeOffscreen();
   return { ok: false, error: '操作失败：' + errMsg(err) };
 }

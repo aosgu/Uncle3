@@ -198,6 +198,7 @@
     win: { id: 1, width: 1440, height: 900 },
     screen: { w: 3000, h: 2000 },
     store: {},
+    sessionStore: {},
     offscreenOpen: false,
     badge: '',
     badgeColor: '',
@@ -223,13 +224,46 @@
         get(keys) {
           return Promise.resolve().then(() => {
             if (typeof keys === 'string') return { [keys]: state.store[keys] };
-            const out = {};
-            keys.forEach(k => { out[k] = state.store[k]; });
-            return out;
+            if (Array.isArray(keys)) {
+              const out = {};
+              keys.forEach(k => { out[k] = state.store[k]; });
+              return out;
+            }
+            if (keys && typeof keys === 'object') {
+              const out = {};
+              Object.keys(keys).forEach(k => { out[k] = state.store[k] !== undefined ? state.store[k] : keys[k]; });
+              return out;
+            }
+            return { ...state.store };
           });
         },
         set(obj) {
           return Promise.resolve().then(() => { Object.assign(state.store, obj); });
+        }
+      },
+      session: {
+        get(keys) {
+          return Promise.resolve().then(() => {
+            if (typeof keys === 'string') return { [keys]: state.sessionStore[keys] };
+            if (Array.isArray(keys)) {
+              const out = {};
+              keys.forEach(k => { out[k] = state.sessionStore[k]; });
+              return out;
+            }
+            if (keys && typeof keys === 'object') {
+              const out = {};
+              Object.keys(keys).forEach(k => { out[k] = state.sessionStore[k] !== undefined ? state.sessionStore[k] : keys[k]; });
+              return out;
+            }
+            return { ...state.sessionStore };
+          });
+        },
+        set(obj) { return Promise.resolve().then(() => { Object.assign(state.sessionStore, obj); }); },
+        remove(key) {
+          return Promise.resolve().then(() => {
+            if (Array.isArray(key)) key.forEach(k => delete state.sessionStore[k]);
+            else delete state.sessionStore[key];
+          });
         }
       }
     },

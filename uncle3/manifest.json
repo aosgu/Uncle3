@@ -6,7 +6,7 @@
   "minimum_chrome_version": "116",
   "permissions": [
     "windows",
-    "tabs",
+    "activeTab",
     "tabCapture",
     "storage",
     "offscreen"
