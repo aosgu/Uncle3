@@ -24,9 +24,6 @@ function isLockedPreset(p) {
   return !!p && p.name === 'HD' && p.w === 1280 && p.h === 720;
 }
 
-/**
- * 预设尺寸键（popup/设置页共用，统一在 core.js 定义）
- */
 function presetKey(p) { return p.w + 'x' + p.h; }
 
 /**
@@ -51,9 +48,6 @@ function normalizePresets(stored, legacyCustom) {
   return base.concat(extras);
 }
 
-/**
- * 校验自定义尺寸。返回 { ok, reason }
- */
 function validateSize(w, h) {
   if (w === '' || h === '' || w === null || w === undefined || h === null || h === undefined) {
     return { ok: false, reason: '请输入宽度和高度' };
@@ -72,7 +66,7 @@ function validateSize(w, h) {
 }
 
 /**
- * 判断标签页 URL 是否为 tabCapture 不可捕获的受限页面
+ * 判断标签页 URL 是否为 tabCapture 不可捕获的受限页面（Chrome 权限与安全策略限制）
  */
 function isRestrictedUrl(url) {
   if (!url) return true;
@@ -85,9 +79,6 @@ function isRestrictedUrl(url) {
   return false;
 }
 
-/**
- * 文件名安全化：去除非法字符、截断至 50 字符
- */
 function sanitizeTitle(title, maxLen) {
   maxLen = maxLen || 50;
   let safe = String(title || '')
@@ -118,9 +109,6 @@ function makeFileName(title, mime, date) {
   return sanitizeTitle(title) + '_' + stamp + '.' + ext;
 }
 
-/**
- * 毫秒 → HH:MM:SS
- */
 function fmtTime(ms) {
   const total = Math.max(0, Math.floor(ms / 1000));
   const h = Math.floor(total / 3600);
@@ -130,7 +118,7 @@ function fmtTime(ms) {
 }
 
 /**
- * 徽标文字：m:ss（超 9 分钟显示 9:59+ 无意义，直接按实际）
+ * 徽标文字：m:ss（Chrome action 徽标最多显示约 4 字符，超 9 分钟不截断直接显示实际分秒）
  */
 function fmtBadge(ms) {
   const total = Math.max(0, Math.floor(ms / 1000));
@@ -141,8 +129,8 @@ function fmtBadge(ms) {
 
 /**
  * 按优先级挑选 MediaRecorder mimeType。
- * isSupportedFn: (mime) => boolean，便于测试注入。
- * preferMp4: false 时只从 WebM 候选中挑选（用户取消勾选「导出 MP4」）。
+ * 现代 Chromium（Chrome 126+）优先使用 MP4 (H.264/AAC) 直出；
+ * 环境不支持或用户取消「导出 MP4」时降级为 WebM (VP9/VP8)。
  */
 function pickMimeType(isSupportedFn, preferMp4) {
   const webm = [
