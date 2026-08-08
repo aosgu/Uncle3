@@ -55,7 +55,7 @@ uncle3/
 
 ## 测试
 
-- **单元测试**（core.js 纯逻辑 + 全部 JS 语法校验 + 扩展 HTML 无内联事件静态校验，62 项）：
+- **单元测试**（core.js 纯逻辑 + 全部 JS 语法校验 + 扩展 HTML 无内联事件静态校验，65 项）：
 
   ```bash
   cd uncle3/tests
@@ -63,7 +63,7 @@ uncle3/
   ```
 
 - **集成仿真**（mock chrome API，真实加载 background/offscreen/popup 三段源码，
-  跑完 17 组端到端场景，59 项断言）：用浏览器打开 `uncle3/tests/sim.html`
+  跑完 19 组端到端场景，68 项断言）：用浏览器打开 `uncle3/tests/sim.html`
   （需通过 HTTP 服务访问，如 `ruby -run -e httpd uncle3 -p 8766` 后访问
   `http://localhost:8766/tests/sim.html`）。
 - **设置页仿真**（真实加载 core.js + settings.js，覆盖帧率选项持久化、预设重命名/删除、

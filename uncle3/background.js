@@ -87,6 +87,12 @@ function clearBadge() {
 // ---------- 消息处理 ----------
 
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
+  // OFF_* 是 background ↔ offscreen 之间的私有录制协议，只应由 offscreen 文档处理。
+  // 真实 Chrome 中 runtime.sendMessage 不会自我投递（background 发出去的 OFF_* 不会
+  // 回到本上下文），此处显式忽略可避免仿真环境/异常投递下 background 抢答该消息
+  // （background 无能力处理 OFF_*，会误回 unknown message type 造成 startSession 误判失败）。
+  if (msg && typeof msg.type === 'string' && msg.type.indexOf('OFF_') === 0) return;
+
   // 来自 offscreen 的消息（无 sender.tab，且 type 为大写常量）
   if (msg.type === 'TIME') return onTime(msg, sendResponse);
   if (msg.type === 'STOPPED') return onStopped(msg, sendResponse);
@@ -124,7 +130,7 @@ async function handleMessage(msg) {
       await ensureOffscreen();
       setBadge('0:00');
       try {
-        await chrome.runtime.sendMessage({
+        const resp = await chrome.runtime.sendMessage({
           type: 'OFF_START',
           streamId: msg.streamId,
           audio: !!msg.audio,
@@ -133,6 +139,15 @@ async function handleMessage(msg) {
           maxMs: Number(msg.maxMs) > 0 ? Number(msg.maxMs) : MAX_RECORD_MS,
           title: msg.title || ''
         });
+        // offscreen 可能以 {ok:false} 拒绝启动（录制器忙 / 不支持 MediaRecorder /
+        // 获取媒体流失败等）。必须校验响应，否则会建立「幻影 recording」会话：
+        // 无媒体流、计时冻结、停止后也无 STOPPED 回传（P1-1，tests/sim.js T19 回归）。
+        // 注意：此处不强制关闭 offscreen 文档——「录制器忙」时文档正忙于上一会话
+        // 的 finalize，关闭会中断其导出；让旧会话的 STOPPED → cleanup 自行回收。
+        if (!resp || !resp.ok) {
+          clearBadge();
+          return { ok: false, error: '录制启动失败：' + ((resp && resp.error) || '未知错误') };
+        }
       } catch (e) {
         // 发送失败即录制文档不可用（崩溃/被回收）：不留残留会话，清理后返回错误
         clearBadge();
@@ -196,6 +211,12 @@ async function handleMessage(msg) {
       session = null;
       clearBadge();
       persistSession();
+      // 先通知 offscreen 丢弃并停止可能仍在进行的录制（如看门狗降级 error 后用户关闭时
+      // 文档仍活着的情况），避免残留录制器/媒体流/tick 定时器占用 offscreen，
+      // 否则后续 OFF_START 会一直「录制器忙」。文档已死时该消息发送失败，忽略即可。
+      try {
+        await chrome.runtime.sendMessage({ type: 'OFF_DISCARD' });
+      } catch (e) { /* 文档不可达，随 closeOffscreen 一并清理 */ }
       closeOffscreen();
       return { ok: true };
     }

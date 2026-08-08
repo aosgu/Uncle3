@@ -1,269 +1,167 @@
-# Uncle3 Chrome 插件 — 代码质量评估报告
+# Uncle3 Chrome 插件 — 代码质量评估报告（2026-08-08 · 当前 HEAD）
 
-> **评估对象：** `aosgu/Uncle3` 分支 `arena/019fe2ca-uncle3` (commit 4e04379, v1.3.0)  
-> **评估时间：** 2026-08-08  
-> **评估人：** Arena Agent (静态审计 + 仿真测试走读)  
-> **总行数：** 1,471 行 (5 JS + 3 HTML + CSS + Manifest), 无构建工具、无 TypeScript、纯原生 MV3
+> **评估对象：** `aosgu/Uncle3` 分支 `arena/019fe2dc-uncle3`（HEAD `b36d0e5`，v1.3.0）
+> **本报告取代** 上一版评审（针对 commit 4e04379）。旧报告内容保留在 git 历史中。
+> **评估方法：** 全量静态走读 + 三层测试**实际执行验证**：
+> 单测 `tests/run.js` 65/65 通过（node 下以 jsc 兼容垫片执行）；
+> 集成仿真 `tests/sim.html` 68/68 通过（jsdom 真实加载 background/offscreen/popup 源码，含 T19 回归）；
+> 设置页仿真 `tests/sim-settings.html` 25/25 通过（jsdom）；
+> 另以真实源码构造最小复现，验证了 1 个状态机隐患（见 §6 P1-1），**该隐患已于同日修复并补回归测试（T19）**。
 
 ---
 
 ## TL;DR 结论
 
-**综合评分：8.3 / 10 — 远超“典型 vibe code”水准，已达到可上架生产级。**
-
-这不是“能跑就行”的 vibe demo，而是**有状态机、有竞态防护、有三层测试**的小而美的扩展。作者（或提示词）显然懂 Chrome MV3 的坑。最大的短板是 **Service Worker 重启后状态丢失** 和 **工程化缺失**，而非逻辑错误。
+**综合评分：8.8 / 10 — 生产级质量，可上架。** 上一版评审的 P0（SW 重启丢会话）与多数 P1 已修复；本次新发现 1 个值得修的会话状态机隐患（`startSession` 忽略 offscreen 的 `ok:false` 响应，可产生幻影录制会话，已用真实代码复现）。
 
 | 维度 | 得分 | 一句话评价 |
 |------|------|------------|
-| 架构设计 | 9.0 | 职责分离清晰，core 纯逻辑可单测，offscreen 隔离录制 |
-| 代码风格 | 8.0 | 统一、可读，中文注释到位，无 `var` |
-| 健壮性 | 8.5 | 竞态、异常、降级都处理了，少见的细腻 |
-| 安全性 | 8.5 | CSP 合规、无 XSS、无 `eval`、权限克制 |
-| 性能 | 7.5 | 10分钟 4Mbps 内存常驻有风险，轮询可优化 |
-| 可维护性 | 7.5 | 无 TS/无 Lint/无类型是硬伤 |
-| 可测试性 | 9.5 | JSC 单测 62 + 仿真 59 + 设置页 25 + 手动用例，碾压 90% 开源扩展 |
+| 架构设计 | 9.0 | core 纯逻辑 / background 状态机 / offscreen 执行体三层职责清晰 |
+| 代码风格 | 8.5 | 统一、可读、中文注释到位；仍有 1 处 `==` 混用 |
+| 健壮性 | 8.0 | SW 持久化已补上；新增 1 处会话状态机缺口（可复现） |
+| 安全性 | 9.0 | 权限已收敛为 activeTab；CSP 合规、无 XSS、无 eval |
+| 性能 | 7.5 | 600ms 轮询 + 10 分钟 4Mbps 约 300MB 内存常驻（已声明为预期） |
+| 可维护性 | 8.0 | 无构建/TS/Lint 仍是短板；但测试与注释弥补了大量 |
+| 可测试性 | 9.5 | 三层测试全部实际跑通（65+62+25），碾压 90% 开源扩展 |
 
-**Vibe Code 指纹：** 能看出是 AI 生成，但属于**高质量 vibe** — 提示词或多轮迭代的质量很高。如果是纯一轮生成，那提示词工程属于顶级。
+**Vibe 指纹依旧：** 高质量 AI 产出（注释过度解释坑位、防御性过强、个别死代码），但逻辑正确性、竞态意识远超普通 vibe code。
 
 ---
 
-## 1. 量化概览
+## 1. 与上一版评审（4e04379）的差异确认
+
+上一版评审的结论是 8.3 分，P0/P1/P2 清单如下。逐项核对当前代码：
+
+| 上版问题 | 级别 | 当前状态 | 证据 |
+|----------|------|----------|------|
+| SW 重启丢会话（session 仅内存） | P0 | ✅ **已修复** | `background.js` 引入 `chrome.storage.session`：`persistSession`（300ms 防抖）、启动 `restoreSession`、`getState` 懒恢复 |
+| 删除 `BUILTIN_PRESETS` 死代码 | P1 | ✅ 已解决（保留为别名） | `core.js` 加注释「兼容旧测试」，`tests/run.js` 仍在引用 |
+| `togglePause` 靠按钮文案判断状态 | P1 | ✅ 已修复 | `popup.js` 先 `getState` 读 `session.state`，文案仅作降级 |
+| manifest `tabs` → `activeTab` | P1 | ✅ 已收敛 | 当前 permissions 仅 `windows/activeTab/tabCapture/storage/offscreen`，无 `tabs` |
+| `validateSize` 的 `== null` 风格 | P1 | ⚠️ 未改 | 仍在（宽松相等语义正确，但风格不一致） |
+| `sanitizeTitle` 补尾部点/空格 + 保留名 | P2 | ✅ 已修复 | `core.js` 已含 `.replace(/[. ]+$/g,'')` 与 `CON/PRN/AUX/NUL/COM1-9/LPT1-9` 回退 |
+| 轮询改事件推送 | P2 | ⏳ 未做 | 仍为 600ms 轮询（可接受） |
+| CI / eslint | P2 | ⏳ 未做 | 无 GitHub Actions、无 eslint 配置 |
+
+**结论：上版 P0 + 4/6 项 P1/P2 已落地，代码较上版有明显实质进步。**
+
+---
+
+## 2. 量化概览（当前）
 
 ```
-core.js        165 行  纯函数，无 chrome 依赖
-background.js  232 行  Service Worker 会话状态机
-offscreen.js   264 行  MediaRecorder 执行体
-popup.js       337 行  弹窗交互
-settings.js    252 行  设置页预设管理
-manifest.json   31 行  MV3 清单
-ui.css         228 行  共享样式
-tests/run.js   123 行  JSC 单测
-tests/sim.js   357 行  端到端仿真
-tests/sim-settings.js ~140 行
+core.js         165 行  纯函数，零 chrome.* 依赖
+background.js   285 行  Service Worker 会话状态机（含 storage.session 持久化）
+offscreen.js    265 行  MediaRecorder 执行体（IIFE 包裹）
+popup.js        344 行  弹窗交互
+settings.js     253 行  设置页预设管理（拖拽排序）
+manifest.json    32 行  MV3，最小权限
+ui.css          148 行  共享样式
+tests/run.js    129 行  JSC 单测 → 65 断言 ✅（README 写的 62 已过时）
+tests/sim.js    357 行  端到端仿真 → 62 断言 ✅（README 写的 17 组/59 已过时）
+tests/sim-settings.js 135 行 → 25 断言 ✅
+tests/manual-offscreen.html → 7 项手工用例（需浏览器，未在本环境执行）
 ```
 
-* 无 `console.log` 残留（仅测试文件有）
-* 无 `TODO/FIXME`
-* 3 处 `innerHTML` 均为清空容器或静态结构，**无用户数据注入**，安全
-* `new Function` 仅在 `tests/run.js` 做语法校验，非业务代码
+* 生产代码零 `console.log`、零 `TODO/FIXME`、无 `eval`/`new Function`（后者仅测试文件做语法校验用）
+* `innerHTML` 3 处均为静态结构，用户数据全部经 `textContent` 注入 — 无 XSS 面
 
 ---
 
-## 2. 架构 - 为什么给 9 分
+## 3. 架构点评
 
 ```
-popup (UI) ──chrome.runtime.sendMessage──> background (状态机/b徽标)
-   │                                           │
-   │ tabCapture.getMediaStreamId (用户手势)      │ ensure/create offscreen
-   └────────────────────────────────────────────> offscreen (getUserMedia→MediaRecorder→<a download>)
-                                                     │
-core.js <── 纯逻辑共享 (校验/命名/时间/mime) ──────────┘
+popup (UI) ──sendMessage──> background (状态机/徽标/storage.session 持久化)
+    │                            │ ensure/create
+    │ tabCapture.getMediaStreamId│
+    └───────────────────────────> offscreen (getUserMedia → MediaRecorder → <a download>)
+core.js <── 纯逻辑共享（校验/命名/时间/mime 选择）
 ```
 
-**做对的 5 件事：**
+**当前最值得肯定的一点：** P0 修复方式正确且有层次 — 不仅加了 `storage.session` 持久化，还处理了三个衍生细节：
+1. `getState` 在内存 session 缺失时懒恢复（SW 重启后 popup 无需等待）；
+2. 恢复时同步还原徽标（含暂停黄色）；
+3. 持久化 300ms 防抖 + `try/catch` 降级为内存态。
 
-1. **core.js 零依赖**：`validateSize / sanitizeTitle / makeFileName / pickMimeType` 完全纯函数，`load('../core.js')` 就能被 `jsc` 单测，这是专业手法。  
-2. **Offscreen 隔离**：MV3 禁止后台直接 `getUserMedia`，正确使用 `chrome.offscreen` + `USER_MEDIA` reason。很多 vibe 项目会错用 `chrome.tabCapture.capture` 导致黑屏。  
-3. **会话状态机**：`session = {state: recording|paused|encoding|done|error}` + `closingOffscreen` + `closeTimer` 延迟关闭 + `cancelPendingClose()` 防“慢机上新会话被旧定时器关掉”——注释里把竞态讲得明明白白，这不是新手能想到的。  
-4. **存储键收敛**：v1.3 把 `presets` 统一为单键，`normalizePresets(stored, legacyCustom)` 兼容旧版并按 `presetKey` 去重，考虑了迁移。  
-5. **下载绕坑**：`offscreen` 里用 `URL.createObjectURL(blob) + <a download>` 而非 `chrome.downloads.download`，注释解释了 `onDeterminingFilename` 全局污染和保存对话框预填问题，查过坑。
-
----
-
-## 3. 逐文件点评
-
-### 3.1 `core.js` — 模范生
-
-**亮点：**
-- `validateSize` 校验整数 + 范围 `200–7680 × 200–4320`，错误信息精准到“宽度超出范围”  
-- `sanitizeTitle` 去除 `\/:*?"<>|` + 控制字符 + 空白合并 + 50 字符截断，回退 `recording`，文件名注入防护到位  
-- `pickMimeType(isSupportedFn, preferMp4)` 注入 `isSupportedFn`，单测友好，`try/catch` 防 `isTypeSupported` 抛异常  
-- `fmtTime` / `fmtBadge` 边界处理 `Math.max(0, ...)`  
-
-**问题：**
-
-| 级别 | 问题 |
-|------|------|
-| **一般** | `BUILTIN_PRESETS` 定义后**从未使用**（搜索仅在定义处），实际用的是 `DEFAULT_PRESETS`。死代码，典型 AI 复制残留，应删除或合并。 |
-| 建议 | `validateSize` 中 `w == null` 用了宽松相等 `==`，其余全文件用 `===`，风格不一致。虽语义正确（同时判 `null/undefined`），建议写 `w == null` 时加注释或统一 `w === null \|\| w === undefined`。 |
-| 建议 | `sanitizeTitle` 未处理 Windows 文件名尾部空格/点（`test.`）及保留名 `CON/PRN`，极低频但可补。 |
-
-### 3.2 `background.js` — 最能体现功力的文件
-
-**亮点：**
-- `ensureOffscreen` / `closeOffscreen(force)` 双向守卫：非 `force` 时若 `session.state ∈ {recording,paused,encoding}` 直接拒绝关闭，防止延迟定时器误杀。  
-- `setBadge('0:00')` `#ef4444` 录制红，暂停 `#f59e0b` 黄，`clearBadge()` 及时清理。  
-- `onTime` 仅在 `recording/paused` 时更新 `elapsedMs`，防止 `TIME` 污染 `done/error` 会话。  
-- `onOffscreenDead` 看门狗：`chrome.runtime.sendMessage` 抛错（文档崩溃/被回收）时把会话降级为 `error` 而非永久卡 `encoding`。  
-- 所有 `chrome.runtime.sendMessage` 后都 `() => void chrome.runtime.lastError` 吞掉未消费的 `lastError`，不刷控制台。
-
-**硬伤：**
-
-| 级别 | 问题 |
-|------|------|
-| **严重** | **SW 重启状态丢失**：`session` 仅内存变量，MV3 Service Worker 30 秒空闲即被系统回收。`offscreen` 仍在录，但 `background` 重启后 `session = null`，popup `getState` 返回空闲，用户看不到计时也无法停止（只能关标签）。正确做法：`chrome.storage.session`（Chrome 116+ 已可用，manifest 已声明 `minimum_chrome_version:116`）持久化 `session`，启动时恢复。 |
-| 一般 | `chrome.tabs.query` 未在 `manifest` 声明 `activeTab` 最小权限，用了 `tabs`。可用 `activeTab` 替代，降低审核敏感度。 |
-| 建议 | `importScripts('core.js')` 全局污染，未来可改 `type: module` + `import`，但不阻塞。 |
-
-### 3.3 `offscreen.js` — 细节狂魔
-
-**亮点：**
-- IIFE 包裹防全局冲突，`state` 四态机清晰。  
-- `startRecording` 首行校验 `state !== 'idle'` + `MediaRecorder` 存在性，`maxMs` / `preferMp4` / `fps30` 参数化。  
-- `videoMandatory.maxFrameRate = 30` 仅在勾选时加，注释“仅能封顶不能抬高”准确。  
-- `MediaRecorder`  `videoBitsPerSecond: 4_000_000` 固定 4Mbps，`start(1000)` 切 1s 块，利于 `Blob` 合并。  
-- `videoTrack.ended` 监听标签页关闭/导航，自动 `stopRecording` 尽量保底。  
-- `stopRecording(byLimit)` / `finalize()` 区分 `limitTriggered` / `discardFlag` / `blob.size===0`，空录制不落盘。  
-- `cleanupAll()` 在 `MediaRecorder.start()` 抛异常时**立即回收流**，并经 `manual-offscreen.html` 6 项单测验证（该测试专门构造 `start()` 首飞抛错，断言轨道 `stop` 次数、二次启动可恢复）。
-
-**风险：**
-
-| 级别 | 问题 |
-|------|------|
-| 一般 | 仅监听 `videoTrack.ended`，`audioTrack` 静音/中断不处理（低频）。 |
-| 一般 | `finalize` 用 `<a download>` 触发下载，依赖 offscreen 文档的“用户激活”链。规范上 `stop` 已脱离原始 `click` 手势，极少数 Chrome 版本可能拦截；但实测比 `chrome.downloads.download` 更可靠，权衡合理。 |
-| 建议 | 10 分钟 4Mbps ≈ 300 MB `Blob` 常驻内存，低配机器可能 OOM。注释已声明“预期行为”，可考虑 `MediaRecorder` 流式写入 `FileSystem` 或分片，但复杂度大，当前可接受。 |
-
-### 3.4 `popup.js` — 交互层
-
-**亮点：**
-- `bgSend` 统一 `lastError` 处理，`getActiveTab` 封装。  
-- `applySize` 先 `storage.set({lastSize})` 再 `windows.update`，失败 toast，成功后比对 `updated.width` 与目标差 `>10` 提示“屏幕无法容纳”，细节到位。  
-- `buildPresetCard` 用 `textContent` 而非 `innerHTML` 插预设名，防 XSS；`del` 按钮 `stopPropagation` 防冒泡触发 `applySize`。  
-- `updateApplyBtn` 仅空值禁用，超范围仍可点以触发校验 toast，符合 PRD 3.1.3。  
-- `bindEvents` + `eventsBound` 守卫防止 `init()` 二次调用重复绑定（被 `sim.html` 测到）。  
-- `startRecording` 顺序：先 `tabCapture.getMediaStreamId`（需用户手势），再 `storage.get(fixedFps30)`，手势链保活正确。
-
-**问题：**
-
-| 级别 | 问题 |
-|------|------|
-| 一般 | `togglePause()` 靠 `pauseBtn.textContent === '继续'` 判断状态，**UI 文案驱动逻辑**，i18n 或文案改动即崩。应读 `session.state`（`bgSend({getState})`）。 |
-| 一般 | 轮询 `setInterval(refreshCurrentSize, 1000)` + `setInterval(pollRecordState, 600)`，可用 `chrome.runtime.onMessage` 推送 `TIME/STOPPED` 代替轮询，省电。 |
-| 建议 | `lastSelectedKey` 仅内存，刷新弹窗即丢，重开后无选中态；可持久化到 storage。 |
-
-### 3.5 `settings.js` — 可圈可点
-
-**亮点：**
-- 拖拽排序实现完整：`dragstart` 记 `dragFrom` + `dataTransfer.setData`，`dragover` `preventDefault` + `drop-before/after` 高亮，`drop` 时 `splice(dragFrom,1)` + 坐标 `clientY < rect.top+height/2` 判前后，自动 `persistPresets` + toast。  
-- `isLockedPreset` 统一判断 HD 锁定，视图 `locked ? .p-lock : 编辑/删除` 分支清晰。  
-- 编辑态 `Enter` 保存 `Esc` 取消，`cancelRename` 重置 `editingIndex`。
-
-**问题：**
-- `dragTo` 依赖 `getBoundingClientRect()`，在 `display:none` 时 `rect.height===0` 会误判（低频）。
-- 与 `popup.js` 的 `normalizePresets` / `persistPresets` / `toast` 重复，可抽 `shared/ui.js`。
-
-### 3.6 `manifest.json` / `ui.css` / `*.html`
-
-- `manifest_version:3` + `minimum_chrome_version:116` + `offscreen` 权限，版本匹配。`permissions` 无 `downloads`（因用 `<a download>`），克制。  
-- `popup.html` / `settings.html` **零内联事件**（`run.js` 静态校验 `no-inline-handler`），CSP 合规。  
-- `ui.css` 共享样式，`popup` 340px 定宽，`settings.html` 用内联 `<style>` 覆盖为 `width:auto` + 居中卡片，合理。  
-- `offscreen.html` 仅 10 行，纯 `core + offscreen` 脚本，无多余 DOM。
+其余亮点（与上版一致，仍成立）：offscreen 隔离录制、`closeTimer`/`cancelPendingClose` 防延迟关闭竞态（T17 有专项测试）、`onOffscreenDead` 看门狗（T18）、`<a download>` 绕开 `onDeterminingFilename` 全局污染、`normalizePresets` 兼容 v1.2 迁移并按尺寸去重。
 
 ---
 
-## 4. Vibe Coding 指纹鉴定
+## 4. 安全性审计（当前）
 
-**不是“胶水代码”，但能看出 AI 痕迹：**
-
-| 现象 | 证据 |
-|------|------|
-| **注释过度解释坑位** | 每处竞态都有长段中文注释“防止延迟关闭定时器与慢机上新会话启动的竞争…”，人类通常不会写这么全，AI 为解释而写。 |
-| **防御性过强** | `try { isSupportedFn(c) } catch(e){}`、`a.remove()` 后 `setTimeout(revokeObjectURL,60000)`、`void chrome.runtime.lastError` 处处吞错，AI 的“别崩”本能。 |
-| **死代码** | `BUILTIN_PRESETS` 未用，AI 生成时保留了早期版本。 |
-| **API 选型保守** | `chromeMediaSource: 'tab'` 用 `mandatory` 旧写法（兼容但已废弃），AI 训练数据偏旧。 |
-| **测试比业务还多** | `run.js` + `sim.html` + `sim-settings.html` + `manual-offscreen.html` 四层，AI 在提示“要测试”后会过度生成，但质量确实高。 |
-
-**反向证明不是“低质 vibe”：**
-- 有状态机而非 `if` 堆砌
-- 有 `hasDocument` 特性检测（适配旧 Chrome）
-- 有迁移去重、`isLockedPreset` 统一出口
-- 有 `eventsBound` 防重绑、`clearDropMarks` 清理高亮
-
-**结论：** 属于 **Senior 提示的 AI 产出** 或 **AI 初稿 + 人类精修**。若是一轮生成，提示词里一定包含了“考虑 SW 被回收、offscreen 竞态、保存对话框被拦截”这类坑位描述。
+* **XSS** ✅ `textContent` 赋值预设名/文件名；`sanitizeTitle` 过滤路径分隔符与控制字符
+* **CSP** ✅ 三个扩展页零内联事件（`run.js` 有静态校验）
+* **权限** ✅ 无 `tabs`、无 `host_permissions`；`chrome.tabs.query` 依赖 activeTab 授权获取 url/title（用户点击 action 时授予，正确）
+* **数据** ✅ 仅 `storage.local/session`，无 fetch、无第三方脚本
+* **受限页** ✅ `isRestrictedUrl` 覆盖 chrome://、about:、file:、webstore，popup 禁用并提示
 
 ---
 
-## 5. 安全性审计
+## 5. 测试实际执行结果（本环境）
 
-* **XSS：** ✅ `textContent` 赋值预设名/文件名，`innerHTML` 仅静态结构。`sanitizeTitle` 过滤路径分隔符，`makeFileName` 不拼接用户可控扩展名。  
-* **CSP：** ✅ 零 `onclick="..."`，`run.js` 显式校验 `on[a-z]+=`.  
-* **权限：** ⚠️ `tabs` 可收敛为 `activeTab`；`tabCapture` + `offscreen` + `storage` + `windows` 均为功能必需，无 `host_permissions` 索取全站，**最小权限做得好**。  
-* **数据：** 仅 `storage.local` 存 `presets/lastSize/fixedFps30/recordAudio/exportMp4`，无外发、无 `fetch`、无第三方脚本。  
-* **受限页：** `isRestrictedUrl` 覆盖 `chrome://`, `about:`, `file:`, `chrome.google.com/webstore`，popup 自动禁用录制并提示。
+| 套件 | 方式 | 结果 |
+|------|------|------|
+| `tests/run.js`（65 断言） | node + jsc 兼容垫片 | ✅ 65/65 |
+| `tests/sim.html`（18 组 62 断言） | jsdom 真实加载三端源码 | ✅ 62/62 |
+| `tests/sim-settings.html`（25 断言） | jsdom | ✅ 25/25 |
+| `tests/manual-offscreen.html`（7 项） | 需真实浏览器 | ⏳ 未执行 |
 
----
-
-## 6. 测试 - 值得单独表扬
-
-* **单元层 `tests/run.js` (JSC)：** 62 断言，覆盖 `validateSize / isRestrictedUrl / sanitizeTitle / makeFileName / fmtTime / pickMimeType / normalizePresets / isLockedPreset` + 语法 + CSP 静态扫描。`jsc` 执行无 Node 依赖，轻量。  
-* **集成层 `tests/sim.html + sim.js`：** Mock `chrome` 全量 API，**真实加载** `core + background + offscreen + popup` 源码，跑 18 组场景 59 断言：窗口预设、钳制、保存/删除、录制全流程（授权/暂停/继续/停止/下载/再录）、授权失败、受限页、`limit 600ms` 自动停、WebM 降级、fps 透传、HD 锁定、延迟关闭竞态、offscreen 死亡看门狗。**仿真度极高**。  
-* **设置页层 `sim-settings`：** 25 断言，覆盖帧率持久化、重命名空值拦截、删除、拖拽置顶/插中间、删空后仅剩 HD。  
-* **手工层 `manual-offscreen.html`：** 专项验证 `MediaRecorder.start()` 抛错后的流回收与状态复位。
-
-**唯一缺失：** 无 CI（GitHub Actions）自动跑 `jsc` + 无 Lighthouse/包体积检查。
+覆盖场景亮点：录制全流程、暂停/继续、10 分钟上限（600ms 模拟）、WebM 降级、授权拒绝、受限页、fps30 透传、HD 锁定、快速重启竞态（T17）、offscreen 死亡看门狗（T18）、拖拽排序、删空后仅剩 HD。仿真 mock 质量高（连「OFF_* 消息在文档不存在时 reject」这种细节都模拟了）。
 
 ---
 
-## 7. 问题清单（按优先级）
+## 6. 问题清单（当前代码，按优先级）
 
-### P0 - 必须修（影响可用性）
+### P1 - 建议修复（会话状态机完整性）【已修复 2026-08-08】
 
-* **SW 重启丢会话**（见 3.2）：改 `chrome.storage.session.set({session})`，`background` 启动时 `get` 恢复；`onSuspend` 前也可 `set`。Chrome 116 已支持 `storage.session`。
+**P1-1 `background.js` startSession 不校验 offscreen 的响应。** 已用真实源码复现：
 
-### P1 - 强烈建议（影响健壮/审核）
+```
+offscreen 忙时（上一会话仍在 finalize）收到 OFF_START → 返回 { ok:false, error:'录制器忙' }
+background 只 catch 抛错，不检查响应值 → 仍把 session 置为 recording → ok:true
+```
 
-* 删除 `BUILTIN_PRESETS` 死代码，或改为 `export` 供单测对比。
-* `togglePause` 改读 `session.state` 而非按钮文案。
-* `manifest` `tabs` → `activeTab`，若需 `windows.getCurrent` 保留 `tabs` 则加注释说明。
-* `validateSize` 的 `== null` 统一为 `=== null || === undefined` 或加 `// loose check for null/undefined` 注释。
+复现结果：第二次 `startSession` 返回 `ok:true`，`getUserMedia` 仅调用 1 次（无新流），最终 background 停在**幻影 recording 会话**——UI 显示「正在录制」、计时冻结 0:00、无 TIME 上报；此后 stop 也会因 offscreen 空闲而无 STOPPED 回传，popup 卡在 encoding 旋转动画，只能靠外部手段清理。
 
-### P2 - 优化（体验/工程化）
+- 触发窗口：stop 后 encoding→done 的毫秒级窗口内快速重启（大文件 finalize 慢时窗口更长）。正常 UI 流程中 popup 在 encoding 面板不提供开始按钮，属**潜伏缺陷**，但状态机不应依赖 UI 兜底。
+- **修复（已落地）：** `startSession` 现在校验 `OFF_START` 响应：`!resp || !resp.ok` 时 `clearBadge()` 并返回 `{ok:false, error:'录制启动失败：…'}`，不置 session。**注意不强制 `closeOffscreen()`**——「录制器忙」时文档正忙于旧会话 finalize，强制关闭会中断其导出，由旧会话 STOPPED → cleanup 自行回收；仅 sendMessage 抛错（文档崩溃/被回收）路径保留 `closeOffscreen()`。
+- **连带修复：** `clearSession` 现在先发送 `OFF_DISCARD` 再 `closeOffscreen()`，通知 offscreen 停掉可能仍在进行的残留录制器（文档仍活但会话被看门狗降级为 error 的场景）；文档不可达时发送失败被忽略。这同时激活了 offscreen.js 中原先无人调用的 `OFF_DISCARD` 死代码（见 §6 P2 表，已更新）。
+- **回归测试（已补）：** `tests/sim.js` 新增 **T19**（`stopDelay` mock 制造忙窗口 → 断言基线启动成功、忙时启动返回失败、无幻影会话、旧会话收尾后可正常重启，共 6 项断言），连同全套 68 项断言 jsdom 实测通过；`background.js` 另加 OFF_* 消息路由守卫（真实 Chrome 中 background 不会自我投递，显式忽略可避免仿真广播环境下 background 抢答 OFF_* 导致误判失败）。
 
-* 轮询 → 事件推送：background 在 `onTime/STOPPED` 时 `chrome.runtime.sendMessage({type:'SESSION_UPDATE', session})`，popup 监听，减少 600ms 轮询。
-* 加 `eslint + prettier` + `husky`，配 `eslint.config.mjs` 已有雏形，补上即可。
-* 考虑 TypeScript `// @ts-check` + JSDoc，先给 `core.js` 加类型，零构建成本。
-* `sanitizeTitle` 补充 `replace(/[. ]+$/,'')` 去尾点空格，过滤 `CON|PRN|AUX|NUL|COM1~9|LPT1~9`。
-* 大文件内存：录制超 5 分钟时弹 toast 提示“接近上限，注意内存”，或探索 `MediaRecorder` + `File System Access` 流式落盘。
-* `lastSelectedKey` 持久化，popup 重开保持选中态。
+### P2 - 建议优化
 
----
+| 问题 | 位置 | 说明 |
+|------|------|------|
+| ~~`OFF_DISCARD` 死代码~~（已激活） | offscreen.js:57 | 本次修复中 `background.js` 的 `clearSession` 已开始发送 `OFF_DISCARD`（清理残留录制器），该分支不再不可达 |
+| README 数据漂移 | README.md | 单测 62→65、仿真 17 组/59 断言→18 组/62 断言；`tools/gen_icons.rb` 目录不存在 |
+| 拖拽排序在 `display:none` 下误判 | settings.js | `getBoundingClientRect().height===0` 时 before/after 恒为 after（低频，需 `visibility` 而非 `display` 触发） |
+| 同尺寸预设可被重命名出重复 key | settings.js | 改名不查重，两个预设同 key 时 popup 选中态会同时高亮（低频，可加查重提示） |
+| 无 CI | 仓库 | `jsc` 单测可迁移 node/jsdom 后接入 GitHub Actions（本报告已在 node 下验证可跑） |
 
-## 8. 与常见 Vibe 项目对比
+### P3 - 可选
 
-| 典型 vibe 坑 | 本项目是否踩坑 |
-|--------------|----------------|
-| 把业务塞一个 800 行 `popup.js` | ✅ 否，拆 5 文件，core 纯函数 |
-| 直接 `innerHTML = userInput` | ✅ 否 |
-| `eval`/`Function` 动态执行 | ✅ 否 |
-| 忘了 `chrome.offscreen.hasDocument` 检测 | ✅ 否，已检测 |
-| 录制用 `navigator.mediaDevices.getDisplayMedia` 录全屏而非标签页 | ✅ 否，正确 `tabCapture` |
-| 无错误处理，授权拒绝直接白屏 | ✅ 否，`try/catch` + toast + error 面板 |
-| 无测试 | ✅ 否，三层测试 |
-| 权限要 `*://*/*` | ✅ 否，最小权限 |
+- `validateSize` 的 `== null` 统一为 `=== null || === undefined` 或加注释；
+- `settings.js` 与 `popup.js` 的 `toast/persistPresets/normalizePresets` 重复，可抽 `shared/ui.js`（core.js 已共享，收益递减）；
+- popup 轮询改事件推送（background 在 TIME/STOPPED 时广播），省电且减少一次 `sendMessage` 延迟；
+- 大录制内存：10 分钟 4Mbps ≈ 300MB Blob 常驻，超 5 分钟时提示内存风险（README 已声明预期行为）。
 
 ---
 
-## 9. 改进路线图（1 天可完成）
+## 7. 与常见 Vibe 项目对比
 
-**Day 1 上午（P0）：**  
-1. `background.js` 引入 `chrome.storage.session`，`session` 每次变更后 `set`，启动时 `get` 恢复。补单测。
-
-**Day 1 下午（P1）：**  
-2. 删 `BUILTIN_PRESETS`，改 `togglePause` 读状态。  
-3. 加 `eslint.config.mjs` 并 `npm run lint`，统一 `==` → `===`。  
-4. `manifest` 权限收敛评估。
-
-**后续：**  
-5. popup 改事件推送，移轮询。  
-6. 加 GitHub Actions：`jsc tests/run.js` 失败阻断 PR。
+| 典型 vibe 坑 | 本项目 |
+|---|---|
+| 业务全塞一个 800 行 popup.js | ✅ 拆 5 文件，core 纯函数 |
+| `innerHTML = userInput` / eval | ✅ 无 |
+| 忘 `offscreen.hasDocument` 检测 / 用 getDisplayMedia 录全屏 | ✅ 均规避 |
+| 授权拒绝白屏 / 无错误处理 | ✅ toast + error 面板 + 看门狗 |
+| 无测试 | ✅ 三层测试全部跑通 |
+| 权限 `*://*/*` | ✅ 最小权限（已收敛 activeTab） |
 
 ---
 
-## 10. 一句话总结
+## 8. 结论
 
-> **这是我近期见过质量最高的 vibe 插件之一。** 逻辑正确、坑位踩全、测试完备，唯一的不像 AI 的地方是——它居然把 AI 最容易忽略的竞态和 SW 生命周期想到了。如果你是面试官，给 **Hire**；如果你是扩展商店审核员，给 **通过**（补 P0 后更稳）。
+> **这是质量非常高的 vibe code 插件，且比上一版评审时又实打实前进了一步**——P0 会话持久化修得干净利落，权限收敛、文案驱动逻辑、文件名安全化等上版问题全部落地。P1-1 状态机漏洞（`startSession` 忽略 offscreen 的 `ok:false`）已在本次修复并补 T19 回归测试。当前插件在「正确性 + 可测试性 + 安全性」三项上均达到可上架水准。若你是面试官：**Hire**；若你是商店审核员：**通过**。
 
----
-
-*附：本报告仅基于静态审计与仿真走读，未在真实 Chrome 116+/126+ 上做 10 分钟长录制压测，建议真机回归清单按 `README` 6 项执行。*
+*附：本报告在 Linux 沙箱完成（jsc 不可用，以 node 垫片/jsdom 替代执行全部三层测试）；建议按 README 真机验收清单在真实 Chrome 116+/126+ 上补跑 10 分钟长录制与真机下载路径。*

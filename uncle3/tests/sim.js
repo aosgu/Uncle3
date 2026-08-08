@@ -330,8 +330,54 @@
       JSON.stringify(deadSession));
     await waitUntil(() => !$('st-error').classList.contains('hidden'), 3000);
     check('T18 popup 展示错误面板', !$('st-error').classList.contains('hidden'));
+    // 复活 offscreen 文档（模拟 SW 下次 ensureOffscreen 重建文档）后 resetRecording：
+    // clearSession 会向 offscreen 发送 OFF_DISCARD 停掉 T18 期间仍在运行的残留录制器。
+    // 真实 Chrome 中文档销毁即状态归零，无需清理；此处 mock 的文档内部状态常驻，
+    // 必须显式清掉，否则后续用例（T19）会一直「录制器忙」。
+    sim.offscreenOpen = true;
+    await resetRecording();
+    await sleep(200);
+
+    // ---------- T19 offscreen 忙时启动失败不得建立幻影会话（P1-1 回归） ----------
+    // 触发窗口：stop 后 encoding→done 的毫秒级窗口内快速重启。UI 上 popup 在 encoding
+    // 面板无开始按钮，正常操作难以命中；但状态机不应依赖 UI 兜底——此前 startSession
+    // 忽略 OFF_START 的 {ok:false} 响应，会留下「幻影 recording」会话（无媒体流、计时冻结）。
+    sim.stopDelay = 0;
+    await bgSendDirect({ type: 'clearSession' });
+    await sleep(150);
+    const busy1 = await bgSendDirect({ type: 'startSession', streamId: 'busy-1', tabId: sim.tab.id,
+      audio: true, mp4: true, fps30: false, title: 'busy' });
+    check('T19 基线：干净环境下启动成功', busy1 && busy1.ok === true, JSON.stringify(busy1));
+    sim.stopDelay = 250; // 此后 finalize 延迟 250ms，制造 offscreen 忙窗口
+    await sleep(200);
+    await bgSendDirect({ type: 'stopSession' }); // offscreen 进入 stopping，250ms 后才 finalize
+    await sleep(80); // 旧会话仍在 finalize（offscreen 忙）
+    const busyStart = await bgSendDirect({ type: 'startSession', streamId: 'busy-2', tabId: sim.tab.id,
+      audio: true, mp4: true, fps30: false, title: 'busy2' });
+    check('T19 忙时启动返回失败', busyStart && busyStart.ok === false, JSON.stringify(busyStart));
+    const busySession = (await getSession()).session;
+    check('T19 未建立幻影 recording 会话', !busySession || busySession.state !== 'recording',
+      JSON.stringify(busySession));
+    check('T19 会话为空闲或 done（旧会话正常收尾）',
+      !busySession || busySession.state === 'done' || busySession.state === 'error' || busySession.state === 'encoding',
+      JSON.stringify(busySession));
+    await sleep(400); // 等旧会话 finalize 完成并回传 STOPPED
+    await waitUntil(async () => {
+      const r = await getSession();
+      return r.session && r.session.state === 'done';
+    }, 2500);
+    // 旧会话收尾后必须能正常重启录制（无残留占用）
+    const retryStart = await bgSendDirect({ type: 'startSession', streamId: 'busy-3', tabId: sim.tab.id,
+      audio: true, mp4: true, fps30: false, title: 'busy3' });
+    check('T19 旧会话收尾后可重启', retryStart && retryStart.ok === true, JSON.stringify(retryStart));
+    await sleep(300);
+    check('T19 重启会话正常 recording', (await getSession()).session.state === 'recording',
+      JSON.stringify((await getSession()).session));
+    await bgSendDirect({ type: 'stopSession' });
+    await sleep(600);
     await resetRecording();
     await sleep(150);
+    sim.stopDelay = 0;
 
     // ---------- 汇总 ----------
     const summary = $('summary');

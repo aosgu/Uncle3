@@ -208,6 +208,7 @@
     gumFail: false,
     gumConstraints: null,
     tabCaptureFail: false,
+    stopDelay: 0, // MediaRecorder.stop() 触发 finalize 的延迟（>0 时模拟慢导出/大文件编码，制造 offscreen 忙窗口）
     msgLog: [],
     lastError: null,
     optionsOpened: false
@@ -346,12 +347,13 @@
     resume() { if (this.state === 'paused') this.state = 'recording'; }
     stop() {
       this.state = 'inactive';
+      const delay = state.stopDelay || 0;
       setTimeout(() => {
         if (this.ondataavailable) {
           this.ondataavailable({ data: new Blob(['fake-video-data'], { type: this.mimeType }) });
         }
         if (this.onstop) this.onstop();
-      }, 0);
+      }, delay);
     }
   };
 
