@@ -33,6 +33,8 @@ async function restoreSession() {
   if (!chrome.storage || !chrome.storage.session) return;
   try {
     const data = await chrome.storage.session.get('session');
+    // 读取期间若已有会话被创建（如并发 startSession），不得用陈旧快照覆盖它
+    if (session) return;
     if (data && data.session) {
       session = data.session;
       // 恢复徽标（SW 重启后保持与原会话一致）

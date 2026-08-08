@@ -20,7 +20,8 @@
     </header>
 
     <section class="panel">
-      <!-- 窗口尺寸 -->
+      <!-- 窗口尺寸（录制进行中/完成后收起，给录制区腾出空间，避免“再录一次”被挤出可视区） -->
+      <div id="sizeSection">
       <div class="sec-title">窗口尺寸</div>
       <div class="current">当前窗口尺寸 <b id="curSize">-- × --</b></div>
       <div class="grid" id="presets"></div>
@@ -45,8 +46,8 @@
         </div>
       </div>
       <div class="hint">注：调整的是浏览器窗口外框尺寸，页面可视区域会略小。</div>
-
       <div class="divider"></div>
+      </div>
 
       <!-- 页面录制 -->
       <div class="sec-title">页面录制</div>
