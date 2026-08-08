@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>Uncle3 · 设置页仿真测试</title>
+<style>
+  body { font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", sans-serif;
+    background: #eef1f5; display: flex; gap: 32px; justify-content: center;
+    padding: 32px 16px; align-items: flex-start; flex-wrap: wrap; }
+  .page { width: 420px; background: #fff; border-radius: 16px;
+    box-shadow: 0 8px 30px rgba(15,23,42,.12); padding: 16px; }
+  .results-wrap { width: 520px; }
+  .results-wrap h2 { font-size: 14px; color: #6b7280; margin-bottom: 12px; }
+  #summary { font-size: 14px; font-weight: 700; margin-bottom: 10px; padding: 10px 14px;
+    border-radius: 10px; background: #e5e7eb; color: #374151; }
+  #summary.ok { background: #dcfce7; color: #15803d; }
+  #summary.bad { background: #fee2e2; color: #b91c1c; }
+  #results { font-family: ui-monospace, Menlo, monospace; font-size: 12px; line-height: 1.9;
+    background: #fff; border-radius: 12px; padding: 14px 16px; box-shadow: 0 4px 16px rgba(15,23,42,.08); }
+  #results .pass { color: #15803d; }
+  #results .fail { color: #b91c1c; font-weight: 700; }
+  /* 设置页结构基础样式（真实页面来自 ui.css，此处仅保证可读） */
+  .toast { position: fixed; top: 10px; left: 50%; background: #111827; color: #fff;
+    font-size: 12px; padding: 7px 14px; border-radius: 999px; opacity: 0; }
+  .toast.show { opacity: 1; }
+  .sec-title { font-size: 12px; font-weight: 600; color: #6b7280; margin: 10px 0 8px; }
+  .opt-line { display: flex; align-items: center; gap: 8px; font-size: 13px; }
+  .hint { font-size: 11px; color: #9ca3af; line-height: 1.6; margin-top: 8px; }
+  .divider { height: 1px; background: #f3f4f6; margin: 14px 0; }
+  .p-row { border: 1px solid #e5e7eb; border-radius: 10px; padding: 9px 10px; margin-bottom: 8px; }
+  .p-btn { border: none; background: #f3f4f6; border-radius: 6px; padding: 4px 10px; font-size: 12px; cursor: pointer; }
+  .p-empty { font-size: 12px; color: #9ca3af; }
+</style>
+</head>
+<body>
+  <!-- ===== 与 settings.html 一致的页面结构 ===== -->
+  <div class="page">
+    <div class="toast" id="toast"></div>
+    <header>Uncle3 · 设置（仿真）</header>
+    <div class="sec-title">录制设置</div>
+    <label class="opt-line"><input type="checkbox" id="fpsChk"> 固定帧率（30fps）</label>
+    <div class="hint">默认不勾选…</div>
+    <div class="divider"></div>
+    <div class="sec-title">预设尺寸管理</div>
+    <div class="p-list" id="presetList"></div>
+    <div class="hint">内置预设不可修改…</div>
+  </div>
+
+  <div class="results-wrap">
+    <h2>设置页仿真测试结果</h2>
+    <div id="summary">测试运行中…</div>
+    <div id="results"></div>
+  </div>
+
+  <!-- mock 内联：chrome.storage.local 最小实现 + 种子数据 -->
+  <script>
+(function () {
+  const state = {
+    store: {
+      // v1.3 统一预设列表（内置+自定义合并，顺序即展示顺序）
+      presets: [
+        { name: 'HD', w: 1280, h: 720 },
+        { name: 'Full HD', w: 1920, h: 1080 },
+        { name: 'iPhone 14 Pro', w: 393, h: 852 },
+        { name: 'iPad Mini', w: 768, h: 1024 },
+        { name: '直播窗口', w: 1280, h: 800 },
+        { name: '演示尺寸', w: 1024, h: 768 }
+      ]
+      // fixedFps30 故意不预置，验证默认不勾选
+    }
+  };
+  window.__simS = state;
+  window.chrome = {
+    storage: {
+      local: {
+        get(keys) {
+          return Promise.resolve().then(() => {
+            if (typeof keys === 'string') return { [keys]: state.store[keys] };
+            const out = {};
+            keys.forEach(k => { out[k] = state.store[k]; });
+            return out;
+          });
+        },
+        set(obj) { return Promise.resolve().then(() => { Object.assign(state.store, obj); }); }
+      }
+    }
+  };
+})();
+  </script>
+  <script src="../core.js?v=5"></script>
+  <script src="../settings.js?v=5"></script>
+  <script src="sim-settings.js?v=5"></script>
+</body>
+</html>

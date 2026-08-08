@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>Uncle3 · offscreen 手动验证</title>
+<style>
+  body { font-family: -apple-system, sans-serif; padding: 24px; background: #f8fafc; }
+  .ok { color: #16a34a; font-weight: 600; }
+  .bad { color: #dc2626; font-weight: 600; }
+  #results div { font-size: 13px; padding: 3px 0; border-bottom: 1px solid #e5e7eb; }
+</style>
+</head>
+<body>
+  <h3>offscreen.js 独立验证（start 异常清理 / 流泄漏防护）</h3>
+  <div id="summary">运行中…</div>
+  <div id="results"></div>
+
+  <script>
+// ===== 最小 Mock：只驱动 offscreen.js，不含 popup/background，无并发干扰 =====
+(function () {
+  const state = {
+    trackStops: 0,
+    gumCalls: 0,
+    startThrowOnce: true,
+    recErrors: [],
+    listeners: []
+  };
+  window.__man = state;
+
+  window.chrome = {
+    runtime: {
+      get lastError() { return null; },
+      onMessage: { addListener(fn) { state.listeners.push(fn); } },
+      sendMessage(msg, cb) {
+        if (msg && msg.type === 'REC_ERROR') state.recErrors.push(msg.error);
+        if (cb) setTimeout(() => cb({ ok: true }), 0);
+      }
+    }
+  };
+
+  window.MediaRecorder = class {
+    static isTypeSupported(m) { return /^video\/(mp4|webm)/.test(m); }
+    constructor(stream, opts) {
+      this.state = 'inactive';
+      this.mimeType = (opts && opts.mimeType) || 'video/webm';
+    }
+    start() {
+      if (state.startThrowOnce) {
+        state.startThrowOnce = false;
+        throw new Error('InvalidStateError: mock start failure');
+      }
+      this.state = 'recording';
+    }
+    pause() {}
+    resume() {}
+    stop() { this.state = 'inactive'; }
+  };
+
+  window.navigator.mediaDevices.getUserMedia = function () {
+    state.gumCalls += 1;
+    const track = {
+      stop() { state.trackStops += 1; },
+      addEventListener() {}
+    };
+    return Promise.resolve({
+      getTracks() { return [track]; },
+      getVideoTracks() { return [track]; },
+      getAudioTracks() { return []; }
+    });
+  };
+})();
+  </script>
+  <script src="../core.js?v=1"></script>
+  <script src="../offscreen.js?v=1"></script>
+  <script>
+// ===== 验证脚本 =====
+(async function () {
+  let passed = 0, failed = 0;
+  const box = document.getElementById('results');
+  function check(name, cond, extra) {
+    const d = document.createElement('div');
+    d.textContent = (cond ? 'PASS  ' : 'FAIL  ') + name + (cond || !extra ? '' : '  [' + extra + ']');
+    d.className = cond ? 'ok' : 'bad';
+    box.appendChild(d);
+    cond ? passed++ : failed++;
+  }
+  function offSend(msg) {
+    return new Promise(resolve => {
+      for (const fn of window.__man.listeners.slice()) {
+        const ret = fn(msg, {}, resolve);
+        if (ret === true) return;
+        if (ret !== undefined) { resolve(ret); return; }
+      }
+      resolve(undefined);
+    });
+  }
+  const startMsg = { type: 'OFF_START', streamId: 's1', audio: false, maxMs: 600000, title: 't', mp4: true, fps30: false };
+
+  await new Promise(r => setTimeout(r, 100));
+
+  // 第一次启动：start() 抛异常 → 应返回失败、流轨道被 stop、REC_ERROR 上报
+  const r1 = await offSend({ ...startMsg });
+  check('M1 start() 异常时返回失败', !!r1 && r1.ok === false, JSON.stringify(r1));
+  check('M1 失败后旧流轨道已 stop（无泄漏）', window.__man.trackStops === 1, 'stops=' + window.__man.trackStops);
+  check('M1 REC_ERROR 已上报', window.__man.recErrors.length === 1, JSON.stringify(window.__man.recErrors));
+
+  // 第二次启动：状态应已复位 idle，可正常开始
+  const r2 = await offSend({ ...startMsg, streamId: 's2' });
+  check('M2 失败后可再次启动（状态已复位）', !!r2 && r2.ok === true, JSON.stringify(r2));
+  check('M2 第二次重新获取了流', window.__man.gumCalls === 2, 'gumCalls=' + window.__man.gumCalls);
+  check('M2 新轨道未被误 stop', window.__man.trackStops === 1, 'stops=' + window.__man.trackStops);
+
+  const summary = document.getElementById('summary');
+  const text = '总计: ' + (passed + failed) + '  通过: ' + passed + '  失败: ' + failed +
+    (failed ? '  —— FAILED' : '  —— ALL PASSED');
+  summary.textContent = text;
+  summary.className = failed ? 'bad' : 'ok';
+  document.title = '[Uncle3-offscreen手动验证] ' + text;
+})();
+  </script>
+</body>
+</html>
