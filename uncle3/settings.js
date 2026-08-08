@@ -3,11 +3,8 @@
 
 const $ = id => document.getElementById(id);
 
-// v1.3 起统一预设列表（内置+自定义合并），storage 键 presets，顺序即展示顺序
 let presets = [];
-let editingIndex = -1; // 正在重命名的预设下标，-1 表示无
-
-// 拖拽排序状态（dragFrom 记录拖拽源下标，便于合成事件测试）
+let editingIndex = -1;
 let dragFrom = -1;
 
 let toastTimer;
@@ -23,13 +20,9 @@ async function persistPresets() {
   await chrome.storage.local.set({ presets });
 }
 
-// ==================== 录制设置 ====================
-
 function saveFpsPref() {
   chrome.storage.local.set({ fixedFps30: $('fpsChk').checked });
 }
-
-// ==================== 预设管理 ====================
 
 function renderPresets() {
   const list = $('presetList');
@@ -111,7 +104,6 @@ function buildViewRow(p, i) {
   main.appendChild(actions);
   row.appendChild(main);
 
-  // ---------- 拖拽排序 ----------
   row.addEventListener('dragstart', e => {
     dragFrom = i;
     row.classList.add('dragging');
@@ -234,16 +226,13 @@ async function deletePreset(i) {
   toast('已删除预设：' + p.name);
 }
 
-// ==================== 初始化 ====================
-
 async function init() {
   const data = await chrome.storage.local.get(['presets', 'customPresets', 'fixedFps30']);
-  // 首次使用以默认顺序（HD/Full HD 置顶）初始化，并合入旧版 customPresets
   presets = normalizePresets(data.presets, data.customPresets);
   if (!Array.isArray(data.presets) || data.presets.length === 0) {
     await chrome.storage.local.set({ presets, customPresets: [] });
   }
-  $('fpsChk').checked = data.fixedFps30 === true; // 默认不勾选
+  $('fpsChk').checked = data.fixedFps30 === true;
 
   $('fpsChk').addEventListener('change', saveFpsPref);
   renderPresets();

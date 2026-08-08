@@ -2,8 +2,6 @@
 
 const $ = id => document.getElementById(id);
 
-// ==================== 通用 ====================
-
 function bgSend(msg) {
   return new Promise(resolve => {
     try {
@@ -30,8 +28,6 @@ function toast(msg) {
   clearTimeout(toastTimer);
   toastTimer = setTimeout(() => t.classList.remove('show'), 2200);
 }
-
-// ==================== 窗口尺寸 ====================
 
 // v1.3 起统一预设列表（内置+自定义合并，顺序可在设置页拖拽调整），storage 键 presets
 let presets = [];
@@ -105,8 +101,6 @@ async function restoreSize() {
   applySize(lastSize.w, lastSize.h);
 }
 
-// ---- 存为预设 ----
-
 function toggleSaveForm() {
   const form = $('saveForm');
   if (form.classList.contains('show')) { closeSaveForm(); return; }
@@ -146,8 +140,6 @@ async function deletePreset(p) {
   toast('已删除预设：' + p.name);
 }
 
-// ---- 当前尺寸回显 ----
-
 async function refreshCurrentSize() {
   try {
     const win = await chrome.windows.getCurrent();
@@ -160,9 +152,6 @@ function updateApplyBtn() {
   $('applyBtn').disabled = $('w').value === '' || $('h').value === '';
 }
 
-// ==================== 页面录制 ====================
-
-// uiState: null(跟随后台 session) | 'requesting'
 let uiState = null;
 let restrictedTab = false;
 
@@ -261,7 +250,7 @@ async function startRecording() {
       tabId: tab.id,
       audio: $('audioChk').checked,
       mp4: $('mp4Chk').checked,
-      fps30: fixedFps30 === true, // 设置页选项，默认不勾选
+      fps30: fixedFps30 === true,
       title: tab.title || tab.url || ''
     });
     if (!resp.ok) toast('启动录制失败：' + (resp.error || '未知错误'));
@@ -305,8 +294,6 @@ function openSettings() {
   chrome.runtime.openOptionsPage();
 }
 
-// ==================== 初始化 ====================
-
 let eventsBound = false;
 function bindEvents() {
   // MV3 扩展页 CSP 禁止内联事件（onclick="…" 会被静默拦截），
@@ -330,13 +317,12 @@ function bindEvents() {
 
 async function init() {
   const data = await chrome.storage.local.get(['presets', 'customPresets', 'recordAudio', 'exportMp4']);
-  // 首次使用以默认顺序（HD/Full HD 置顶）初始化，并合入旧版 customPresets
   presets = normalizePresets(data.presets, data.customPresets);
   if (!Array.isArray(data.presets) || data.presets.length === 0) {
     await chrome.storage.local.set({ presets, customPresets: [] });
   }
   $('audioChk').checked = data.recordAudio !== false;
-  $('mp4Chk').checked = data.exportMp4 !== false; // 默认勾选
+  $('mp4Chk').checked = data.exportMp4 !== false;
 
   bindEvents();
   renderPresets();

@@ -1,6 +1,6 @@
 // tests/run.js —— Uncle3 逻辑测试（JavaScriptCore 执行）
 // 用法: cd uncle3/tests && jsc run.js
-// 覆盖：core.js 单元测试 + 全部 JS 文件语法校验 + manifest 结构校验
+// 覆盖：core.js 单元测试 + 全部 JS 文件语法校验 + 扩展 HTML 无内联事件静态校验
 
 var passed = 0, failed = 0;
 

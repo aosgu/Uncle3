@@ -13,9 +13,7 @@ const OFFSCREEN_PATH = 'offscreen.html';
  */
 let session = null;
 let closingOffscreen = false;
-let closeTimer = null; // 延迟关闭 offscreen 的定时器句柄（可取消，防竞态）
-
-// ---------- session 持久化（MV3 Service Worker 可能被系统回收） ----------
+let closeTimer = null;
 
 let persistTimer = null;
 async function persistSession() {
@@ -23,7 +21,7 @@ async function persistSession() {
   try {
     if (session) await chrome.storage.session.set({ session });
     else await chrome.storage.session.remove('session');
-  } catch (e) { /* 忽略：session storage 不可用时降级为内存 */ }
+  } catch (e) { /* session storage 不可用时降级为内存 */ }
 }
 function schedulePersist() {
   if (persistTimer) return;
@@ -37,7 +35,6 @@ async function restoreSession() {
     if (session) return;
     if (data && data.session) {
       session = data.session;
-      // 恢复徽标（SW 重启后保持与原会话一致）
       if (session.state === 'recording') setBadge(fmtBadge(session.elapsedMs || 0));
       else if (session.state === 'paused') setBadge(fmtBadge(session.elapsedMs || 0), '#f59e0b');
       else if (session.state === 'encoding') clearBadge();
@@ -46,8 +43,6 @@ async function restoreSession() {
 }
 // 启动时尝试恢复（不阻塞后续消息处理）
 restoreSession();
-
-// ---------- offscreen 管理 ----------
 
 async function ensureOffscreen() {
   if (chrome.offscreen.hasDocument) {
@@ -75,8 +70,6 @@ async function closeOffscreen(force) {
   } catch (e) { /* 忽略 */ }
 }
 
-// ---------- 徽标 ----------
-
 function setBadge(text, color) {
   chrome.action.setBadgeBackgroundColor({ color: color || '#ef4444' });
   chrome.action.setBadgeText({ text: text || '' });
@@ -86,8 +79,6 @@ function clearBadge() {
   chrome.action.setBadgeText({ text: '' });
 }
 
-// ---------- 消息处理 ----------
-
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   // OFF_* 是 background ↔ offscreen 之间的私有录制协议，只应由 offscreen 文档处理。
   // 真实 Chrome 中 runtime.sendMessage 不会自我投递（background 发出去的 OFF_* 不会
@@ -95,12 +86,10 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   // （background 无能力处理 OFF_*，会误回 unknown message type 造成 startSession 误判失败）。
   if (msg && typeof msg.type === 'string' && msg.type.indexOf('OFF_') === 0) return;
 
-  // 来自 offscreen 的消息（无 sender.tab，且 type 为大写常量）
   if (msg.type === 'TIME') return onTime(msg, sendResponse);
   if (msg.type === 'STOPPED') return onStopped(msg, sendResponse);
   if (msg.type === 'REC_ERROR') return onRecError(msg, sendResponse);
 
-  // 来自 popup 的消息（异步回复）
   handleMessage(msg).then(sendResponse).catch(err => {
     sendResponse({ ok: false, error: String(err && err.message || err) });
   });
@@ -227,8 +216,6 @@ async function handleMessage(msg) {
       return { ok: false, error: 'unknown message type' };
   }
 }
-
-// ---------- offscreen 回调 ----------
 
 function onTime(msg, sendResponse) {
   if (!session) return sendResponse({ ok: true });

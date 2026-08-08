@@ -6,7 +6,7 @@
 let mediaStream = null;
 let mediaRecorder = null;
 let chunks = [];
-let state = 'idle'; // idle | recording | paused | stopping
+let state = 'idle';
 let startedAt = 0;
 let pausedAccum = 0;
 let pauseStartedAt = 0;
@@ -16,8 +16,6 @@ let limitTriggered = false;
 let discardFlag = false;
 let sessionTitle = '';
 let preferMp4 = true;
-
-// ---------- 消息入口 ----------
 
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   switch (msg.type) {
@@ -65,8 +63,6 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
 function errMsg(e) {
   return String((e && e.message) || e || '未知错误');
 }
-
-// ---------- 录制控制 ----------
 
 async function startRecording({ streamId, audio, maxMs: limit, title, mp4, fps30 }) {
   if (state !== 'idle') return { ok: false, error: '录制器忙' };
@@ -191,8 +187,6 @@ function stopRecording(byLimit) {
     finalize();
   }
 }
-
-// ---------- 结束与回传 ----------
 
 function finalize() {
   clearInterval(tickTimer);
