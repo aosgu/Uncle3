@@ -334,8 +334,11 @@ async function init() {
   $('h').addEventListener('input', updateApplyBtn);
   updateApplyBtn();
 
+chrome.runtime.onMessage.addListener((msg) => {
+  if (msg && msg.type === 'STATE_UPDATE') { pollRecordState(); }
+});
+
   setInterval(refreshCurrentSize, 1000);
-  setInterval(pollRecordState, 600);
 }
 
 init();
