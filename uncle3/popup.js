@@ -170,6 +170,18 @@ function showPanel(id) {
   ['st-idle', 'st-running', 'st-encoding', 'st-done', 'st-error'].forEach(i => {
     $(i).classList.toggle('hidden', i !== id);
   });
+  // 录制相关状态（录制中/转码/完成/出错）下收起顶部“窗口尺寸”区，
+  // 让录制区占据整块弹窗高度，避免“再录一次”等按钮被挤出可视区而需滚动查找。
+  const recordingStates = ['st-running', 'st-encoding', 'st-done', 'st-error'];
+  const sizeSec = $('sizeSection');
+  if (sizeSec) {
+    sizeSec.classList.toggle('hidden', recordingStates.includes(id));
+    // 兜底：若仍有滚动条，把录制区滚到可视范围内，确保按钮不被遮挡。
+    const rec = document.querySelector('.rec-area');
+    if (rec && (id === 'st-done' || id === 'st-error')) {
+      rec.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    }
+  }
 }
 
 async function checkRestricted() {

@@ -250,6 +250,9 @@ function cleanupStream() {
 }
 
 function cleanupAll() {
+  // 统一清理，防止 onerror 等路径只清流/录制器却漏掉 tick 定时器（漏掉会让旧 interval
+  // 在文档被复用前持续发 TIME，且与下一次 startRecording 新建的 interval 形成双发）。
+  if (tickTimer) { clearInterval(tickTimer); tickTimer = null; }
   cleanupStream();
   mediaRecorder = null;
   chunks = [];
