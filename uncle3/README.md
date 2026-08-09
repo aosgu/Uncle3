@@ -55,19 +55,23 @@ uncle3/
 
 ## 测试
 
-- **单元测试**（core.js 纯逻辑 + 全部 JS 语法校验 + 扩展 HTML 无内联事件静态校验，65 项）：
+- **全量自动化测试套件（Node / npm，共 167 项断言，全部通过 ✅）**：
 
   ```bash
-  cd uncle3/tests
-  /System/Library/Frameworks/JavaScriptCore.framework/Versions/A/Helpers/jsc run.js
+  npm test
   ```
 
-- **集成仿真**（mock chrome API，真实加载 background/offscreen/popup 三段源码，
-  跑完 19 组端到端场景，68 项断言）：用浏览器打开 `uncle3/tests/sim.html`
-  （需通过 HTTP 服务访问，如 `ruby -run -e httpd uncle3 -p 8766` 后访问
-  `http://localhost:8766/tests/sim.html`）。
-- **设置页仿真**（真实加载 core.js + settings.js，覆盖帧率选项持久化、预设重命名/删除、
-  HD 锁定、拖拽排序，25 项断言）：`http://localhost:8766/tests/sim-settings.html`。
+  自动执行四大模块：
+  1. 单元测试与静态语法/CSP 校验（`uncle3/tests/run.js`，68 项断言）
+  2. 端到端集成仿真测试（`uncle3/tests/sim.html`，19 组场景，68 项断言）
+  3. 设置页仿真测试（`uncle3/tests/sim-settings.html`，25 项断言）
+  4. Offscreen 执行体独立生命周期测试（`uncle3/tests/manual-offscreen.html`，6 项断言）
+
+- **浏览器手动/可视化仿真**：
+  可通过本地 HTTP 服务访问各仿真页面，例如：
+  - 端到端集成仿真：`http://localhost:8766/tests/sim.html`
+  - 设置页仿真：`http://localhost:8766/tests/sim-settings.html`
+  - Offscreen 独立验证：`http://localhost:8766/tests/manual-offscreen.html`
 
 - **真机验收清单**（需人工在 Chrome 中执行）：
   1. 点击各预设，窗口尺寸生效且 toast 正确；

@@ -75,7 +75,7 @@ function isRestrictedUrl(url) {
     'edge:', 'about:', 'view-source:', 'devtools:', 'file:'
   ];
   if (restrictedSchemes.some(s => url.startsWith(s))) return true;
-  if (/^https:\/\/chrome\.google\.com\/webstore/.test(url)) return true;
+  if (/^https:\/\/(chrome\.google\.com\/webstore|chromewebstore\.google\.com)/.test(url)) return true;
   return false;
 }
 

@@ -1,0 +1,11 @@
+{
+  "name": "uncle3",
+  "version": "1.3.0",
+  "description": "Uncle3 Chrome 扩展：窗口尺寸调整 + 页面录制导出 MP4",
+  "scripts": {
+    "test": "node test-all.js"
+  },
+  "devDependencies": {
+    "jsdom": "^24.0.0"
+  }
+}

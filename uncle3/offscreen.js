@@ -16,6 +16,7 @@ let limitTriggered = false;
 let discardFlag = false;
 let sessionTitle = '';
 let preferMp4 = true;
+let selectedMime = '';
 
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   switch (msg.type) {
@@ -100,6 +101,7 @@ async function startRecording({ streamId, audio, maxMs: limit, title, mp4, fps30
   }
 
   const mime = pickMimeType(t => MediaRecorder.isTypeSupported(t), preferMp4);
+  selectedMime = mime;
   const options = { videoBitsPerSecond: 4_000_000 };
   if (mime) options.mimeType = mime;
 
@@ -189,10 +191,11 @@ function stopRecording(byLimit) {
 }
 
 function finalize() {
+  if (state === 'idle' && chunks.length === 0) return;
   clearInterval(tickTimer);
   tickTimer = null;
 
-  const mime = (mediaRecorder && mediaRecorder.mimeType) || '';
+  const mime = (mediaRecorder && mediaRecorder.mimeType) || selectedMime || '';
   const blob = new Blob(chunks, { type: mime || 'video/webm' });
   const wasLimit = limitTriggered;
   const shouldDiscard = discardFlag || blob.size === 0;
@@ -255,6 +258,7 @@ function cleanupAll() {
   pausedAccum = 0;
   pauseStartedAt = 0;
   sessionTitle = '';
+  selectedMime = '';
   preferMp4 = true;
 }
 

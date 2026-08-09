@@ -313,6 +313,15 @@ function bindEvents() {
   $('againBtn').addEventListener('click', resetRecording);
   $('errCloseBtn').addEventListener('click', resetRecording);
   $('settingsBtn').addEventListener('click', openSettings);
+
+  // 键盘快捷响应：宽高输入框回车直接应用，保存预设表单回车保存、Esc取消
+  const onKeySize = e => { if (e.key === 'Enter') applyCustom(); };
+  $('w').addEventListener('keydown', onKeySize);
+  $('h').addEventListener('keydown', onKeySize);
+  $('presetName').addEventListener('keydown', e => {
+    if (e.key === 'Enter') confirmSavePreset();
+    if (e.key === 'Escape') closeSaveForm();
+  });
 }
 
 async function init() {
@@ -334,11 +343,24 @@ async function init() {
   $('h').addEventListener('input', updateApplyBtn);
   updateApplyBtn();
 
-chrome.runtime.onMessage.addListener((msg) => {
-  if (msg && msg.type === 'STATE_UPDATE') { pollRecordState(); }
-});
+  // 监听 background 状态推送（即时响应）
+  chrome.runtime.onMessage.addListener(msg => {
+    if (msg && msg.type === 'STATE_UPDATE') { pollRecordState(); }
+  });
 
+  // 监听 storage 变更（与设置页等多窗口双向实时同步）
+  if (chrome.storage && chrome.storage.onChanged) {
+    chrome.storage.onChanged.addListener((changes, area) => {
+      if (area === 'local' && changes.presets) {
+        presets = normalizePresets(changes.presets.newValue, []);
+        renderPresets();
+      }
+    });
+  }
+
+  // 弹窗打开期间定时轮询：更新录制计时器与窗口尺寸（弹窗关闭后定时器随 DOM 销毁）
   setInterval(refreshCurrentSize, 1000);
+  setInterval(pollRecordState, 500);
 }
 
 init();

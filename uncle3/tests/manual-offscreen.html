@@ -56,6 +56,7 @@
     stop() { this.state = 'inactive'; }
   };
 
+  window.navigator.mediaDevices = window.navigator.mediaDevices || {};
   window.navigator.mediaDevices.getUserMedia = function () {
     state.gumCalls += 1;
     const track = {
