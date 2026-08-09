@@ -55,6 +55,19 @@
   <!-- mock 内联：chrome.storage.local 最小实现 + 种子数据 -->
   <script>
 (function () {
+  // Headless 环境（如 jsdom）无排版引擎时提供基础几何坐标，保证拖拽排序仿真通过
+  if (window.Element && (!window.Element.prototype._origGetBCR)) {
+    const orig = window.Element.prototype.getBoundingClientRect;
+    window.Element.prototype._origGetBCR = orig;
+    window.Element.prototype.getBoundingClientRect = function () {
+      const r = orig ? orig.call(this) : { top: 0, bottom: 0, height: 0, width: 0 };
+      if (r && r.height > 0) return r;
+      const idx = Array.from(this.parentNode ? this.parentNode.children : []).indexOf(this);
+      const top = idx >= 0 ? idx * 40 : 0;
+      return { top, bottom: top + 40, height: 40, width: 300, left: 0, right: 300 };
+    };
+  }
+
   const state = {
     store: {
       // v1.3 统一预设列表（内置+自定义合并，顺序即展示顺序）

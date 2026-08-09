@@ -53,21 +53,32 @@ uncle3/
 └── tests/             测试（见下）
 ```
 
-## 测试
+## 工程化与测试
 
-- **单元测试**（core.js 纯逻辑 + 全部 JS 语法校验 + 扩展 HTML 无内联事件静态校验，65 项）：
+- **全量自动化测试与代码质量检查**：
 
   ```bash
-  cd uncle3/tests
-  /System/Library/Frameworks/JavaScriptCore.framework/Versions/A/Helpers/jsc run.js
+  # 运行全量测试套件（共 167 项断言，全部通过 ✅）
+  npm test
+
+  # 单独运行各模块测试
+  npm run test:unit       # 单元测试与静态语法/CSP 校验（68 项）
+  npm run test:sim        # 端到端集成仿真测试（68 项）
+  npm run test:settings   # 设置页仿真测试（25 项）
+  npm run test:offscreen  # Offscreen 执行体独立测试（6 项）
+
+  # 代码质量与规范检查（ESLint）
+  npm run lint
   ```
 
-- **集成仿真**（mock chrome API，真实加载 background/offscreen/popup 三段源码，
-  跑完 19 组端到端场景，68 项断言）：用浏览器打开 `uncle3/tests/sim.html`
-  （需通过 HTTP 服务访问，如 `ruby -run -e httpd uncle3 -p 8766` 后访问
-  `http://localhost:8766/tests/sim.html`）。
-- **设置页仿真**（真实加载 core.js + settings.js，覆盖帧率选项持久化、预设重命名/删除、
-  HD 锁定、拖拽排序，25 项断言）：`http://localhost:8766/tests/sim-settings.html`。
+- **持续集成（CI）**：
+  仓库已配置 GitHub Actions CI（`.github/workflows/ci.yml`），支持 Node.js 20 / 22 矩阵自动运行代码检查与全量测试。
+
+- **浏览器手动/可视化仿真**：
+  可通过本地 HTTP 服务访问各仿真页面，例如：
+  - 端到端集成仿真：`http://localhost:8766/tests/sim.html`
+  - 设置页仿真：`http://localhost:8766/tests/sim-settings.html`
+  - Offscreen 独立验证：`http://localhost:8766/tests/manual-offscreen.html`
 
 - **真机验收清单**（需人工在 Chrome 中执行）：
   1. 点击各预设，窗口尺寸生效且 toast 正确；

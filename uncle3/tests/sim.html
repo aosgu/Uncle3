@@ -358,6 +358,7 @@
   };
 
   // ---------- getUserMedia Mock ----------
+  window.navigator.mediaDevices = window.navigator.mediaDevices || {};
   window.navigator.mediaDevices.getUserMedia = function (constraints) {
     state.gumConstraints = constraints;
     if (state.gumFail) return Promise.reject(new Error('NotAllowedError'));

@@ -236,6 +236,22 @@ async function init() {
 
   $('fpsChk').addEventListener('change', saveFpsPref);
   renderPresets();
+
+  // 监听 storage 变更（与弹窗等多视图实时同步）
+  if (chrome.storage && chrome.storage.onChanged) {
+    chrome.storage.onChanged.addListener((changes, area) => {
+      if (area === 'local') {
+        if (changes.presets) {
+          presets = normalizePresets(changes.presets.newValue, []);
+          if (editingIndex >= presets.length) editingIndex = -1;
+          renderPresets();
+        }
+        if (changes.fixedFps30) {
+          $('fpsChk').checked = changes.fixedFps30.newValue === true;
+        }
+      }
+    });
+  }
 }
 
 init();

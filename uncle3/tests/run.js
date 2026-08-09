@@ -65,7 +65,8 @@ eq('restricted: about:blank', isRestrictedUrl('about:blank'), true);
 eq('restricted: view-source', isRestrictedUrl('view-source:https://a.com'), true);
 eq('restricted: devtools', isRestrictedUrl('devtools://devtools/bundled/inspector.html'), true);
 eq('restricted: file://', isRestrictedUrl('file:///tmp/a.html'), true);
-eq('restricted: webstore', isRestrictedUrl('https://chrome.google.com/webstore/detail/x'), true);
+eq('restricted: webstore legacy', isRestrictedUrl('https://chrome.google.com/webstore/detail/x'), true);
+eq('restricted: webstore new', isRestrictedUrl('https://chromewebstore.google.com/detail/x'), true);
 eq('restricted: empty', isRestrictedUrl(''), true);
 eq('normal: https', isRestrictedUrl('https://example.com'), false);
 eq('normal: http', isRestrictedUrl('http://localhost:3000'), false);
@@ -75,6 +76,8 @@ eq('sanitize 非法字符', sanitizeTitle('a/b\\c:d*e?f"g<h>i|j'), 'abcdefghij')
 eq('sanitize 空白合并', sanitizeTitle('  hello   world  '), 'hello world');
 eq('sanitize 空标题回退', sanitizeTitle(''), 'recording');
 eq('sanitize 截断50', sanitizeTitle('x'.repeat(80)).length, 50);
+eq('sanitize 尾部点与空格过滤', sanitizeTitle('hello... '), 'hello');
+eq('sanitize 保留名回退', sanitizeTitle('CON'), 'recording');
 
 // makeFileName
 var fixedDate = new Date(2026, 7, 8, 9, 5, 3); // 2026-08-08 09:05:03
