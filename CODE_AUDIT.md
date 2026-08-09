@@ -53,11 +53,12 @@
   2. **键盘操作支持**：宽/高输入框支持 `Enter` 键直接应用尺寸；预设命名输入框支持 `Enter` 保存、`Escape` 取消；
   3. **标准 HTML 结构**：补全 `popup.html` 的 `<title>Uncle3</title>` 标签。
 
-### 6. 【测试工程化】全量自动化测试套件与 Headless 兼容
+### 6. 【工程化与 CI/CD 体系落地】
 - **优化点**：
-  1. 引入根目录 `package.json` 与 `test-all.js`，运行 `npm test` 即可在秒级自动跑完 167 项断言；
-  2. 修复 `sim-settings.html` 在 jsdom 无排版引擎下的 `getBoundingClientRect` 仿真，从 22/25 提升至 25/25 全通过；
-  3. 完善 `run.js` 单元测试，补充新 WebStore 域名及 Windows 保留字命名等测试用例。
+  1. **GitHub Actions 持续集成**：创建 `.github/workflows/ci.yml`，配置 Node 20 & 22 矩阵在每次 Pull Request 和 Push 时自动执行代码规范检查与全量自动化测试；
+  2. **ESLint 代码规范与环境隔离**：引入 ESLint 9+ Flat Config（`eslint.config.mjs`），针对 `core.js`、MV3 扩展运行态、浏览器测试与 Node 脚本实现精准的环境全局变量与规则约束，`npm run lint` 0 error 0 warning 通过；
+  3. **分层测试指令与性能报表**：`test-all.js` 扩展支持 `--unit`、`--sim`、`--settings`、`--offscreen` 模块级执行，并在控制台以表格化形式实时输出每组测试的通过数、耗时与汇总指标；
+  4. **全环境测试自愈**：修复 `sim-settings.html` 在 jsdom 无排版引擎下的 `getBoundingClientRect` 几何仿真，测试通过率从 22/25 达到 25/25，全套 167/167 项断言全部秒级通过。
 
 ---
 

@@ -53,19 +53,26 @@ uncle3/
 └── tests/             测试（见下）
 ```
 
-## 测试
+## 工程化与测试
 
-- **全量自动化测试套件（Node / npm，共 167 项断言，全部通过 ✅）**：
+- **全量自动化测试与代码质量检查**：
 
   ```bash
+  # 运行全量测试套件（共 167 项断言，全部通过 ✅）
   npm test
+
+  # 单独运行各模块测试
+  npm run test:unit       # 单元测试与静态语法/CSP 校验（68 项）
+  npm run test:sim        # 端到端集成仿真测试（68 项）
+  npm run test:settings   # 设置页仿真测试（25 项）
+  npm run test:offscreen  # Offscreen 执行体独立测试（6 项）
+
+  # 代码质量与规范检查（ESLint）
+  npm run lint
   ```
 
-  自动执行四大模块：
-  1. 单元测试与静态语法/CSP 校验（`uncle3/tests/run.js`，68 项断言）
-  2. 端到端集成仿真测试（`uncle3/tests/sim.html`，19 组场景，68 项断言）
-  3. 设置页仿真测试（`uncle3/tests/sim-settings.html`，25 项断言）
-  4. Offscreen 执行体独立生命周期测试（`uncle3/tests/manual-offscreen.html`，6 项断言）
+- **持续集成（CI）**：
+  仓库已配置 GitHub Actions CI（`.github/workflows/ci.yml`），支持 Node.js 20 / 22 矩阵自动运行代码检查与全量测试。
 
 - **浏览器手动/可视化仿真**：
   可通过本地 HTTP 服务访问各仿真页面，例如：
