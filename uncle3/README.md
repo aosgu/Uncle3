@@ -49,7 +49,7 @@ uncle3/
 ├── popup.html/js      弹窗 UI 与交互（右上角齿轮进入设置页）
 ├── settings.html/js   设置页（options_page，新标签页打开）：帧率选项 + 预设重命名/删除
 ├── ui.css             popup 与设置页共享样式
-├── icons/             图标（Ruby 脚本生成，见 tools/gen_icons.rb）
+├── icons/             图标
 └── tests/             测试（见下）
 ```
 
@@ -58,12 +58,12 @@ uncle3/
 - **全量自动化测试与代码质量检查**：
 
   ```bash
-  # 运行全量测试套件（共 167 项断言，全部通过 ✅）
+  # 运行全量测试套件（共 174 项断言，全部通过 ✅）
   npm test
 
   # 单独运行各模块测试
   npm run test:unit       # 单元测试与静态语法/CSP 校验（68 项）
-  npm run test:sim        # 端到端集成仿真测试（68 项）
+  npm run test:sim        # 端到端集成仿真测试（75 项）
   npm run test:settings   # 设置页仿真测试（25 项）
   npm run test:offscreen  # Offscreen 执行体独立测试（6 项）
 
