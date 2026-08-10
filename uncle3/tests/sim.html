@@ -216,6 +216,7 @@
   window.__sim = state;
 
   const listeners = [];
+  const portListeners = []; // chrome.runtime.onConnect 的监听器（popup 长连接）
 
   window.importScripts = function () { /* core.js 已单独加载，忽略 */ };
 
@@ -306,6 +307,26 @@
       getURL(p) { return 'chrome-extension://sim/' + p; },
       openOptionsPage() { state.optionsOpened = true; return Promise.resolve(); },
       get lastError() { return state.lastError; },
+      onConnect: {
+        addListener(fn) { portListeners.push(fn); }
+      },
+      // 模拟 popup 通过长连接与 background 通信：返回 port，popup 关闭时调用
+      // port.disconnect() 触发 background 的 onDisconnect（见 T20 回归用例）。
+      connect(opts) {
+        const port = {
+          name: opts && opts.name,
+          _dhandlers: [],
+          onDisconnect: {
+            addListener(fn) { port._dhandlers.push(fn); }
+          },
+          disconnect() {
+            port._dhandlers.slice().forEach(fn => { try { fn(); } catch (e) { /* 忽略 */ } });
+          }
+        };
+        state.popupPort = port;
+        portListeners.slice().forEach(fn => { try { fn(port); } catch (e) { /* 忽略 */ } });
+        return port;
+      },
       onMessage: {
         addListener(fn) { listeners.push(fn); }
       },

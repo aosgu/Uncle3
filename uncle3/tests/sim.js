@@ -379,6 +379,63 @@
     await sleep(150);
     sim.stopDelay = 0;
 
+    // ---------- T20 关闭 popup 且停在“完成”终态时自动重置会话（回到初始页） ----------
+    // 复现用户反馈：录制完成后停留在“再录一次”页，关闭 popup 再打开应回到初始页，
+    // 而非一直卡在“再录一次”页。background 通过 popup 长连接断开感知关闭时机，
+    // 仅当会话为终态（done/error）时清空，非终态（录制中）不受影响（关闭不中断录制）。
+    sim.msgLog.length = 0;
+    await bgSendDirect({ type: 'clearSession' });
+    await sleep(150);
+    $('recBtn').click();
+    await sleep(300);
+    $('stopBtn').click();
+    await sleep(600);
+    resp = await getSession();
+    check('T20 会话进入 done（停在“再录一次”页）', resp.session && resp.session.state === 'done', JSON.stringify(resp.session));
+    // 模拟关闭 popup：触发 background 的 popup 连接断开
+    if (sim.popupPort && typeof sim.popupPort.disconnect === 'function') {
+      sim.popupPort.disconnect();
+      await sleep(200);
+      resp = await getSession();
+      check('T20 关闭 popup 后终态会话自动清空', !resp.session, JSON.stringify(resp.session));
+      // 重新打开 popup（重连）后应回到初始空闲页：getState 返回空闲，idle 面板可见
+      if (chrome.runtime && chrome.runtime.connect) chrome.runtime.connect({ name: 'uncle3-popup' });
+      await pollRecordState();
+      await sleep(150);
+      resp = await getSession();
+      check('T20 重新打开 popup 回到初始空闲页', !resp.session, JSON.stringify(resp.session));
+      check('T20 重新打开后展示初始空闲面板', !$('st-idle').classList.contains('hidden') && $('st-done').classList.contains('hidden'));
+    } else {
+      check('T20 关闭 popup 后终态会话自动清空（环境未模拟连接，跳过）', true);
+    }
+
+    // ---------- T21 关闭 popup 但会话为“录制中”时不被清空（关闭不中断录制） ----------
+    sim.msgLog.length = 0;
+    await bgSendDirect({ type: 'clearSession' });
+    await sleep(150);
+    $('recBtn').click();
+    await sleep(300);
+    resp = await getSession();
+    check('T21 会话进入 recording', resp.session && resp.session.state === 'recording', JSON.stringify(resp.session));
+    // 模拟关闭 popup（此时在录制中）
+    if (sim.popupPort && typeof sim.popupPort.disconnect === 'function') {
+      sim.popupPort.disconnect();
+      await sleep(200);
+      resp = await getSession();
+      check('T21 录制中关闭 popup 不中断/不清空会话', resp.session && resp.session.state === 'recording', JSON.stringify(resp.session));
+      // 重新打开 popup 应恢复录制中面板
+      if (chrome.runtime && chrome.runtime.connect) chrome.runtime.connect({ name: 'uncle3-popup' });
+      await pollRecordState();
+      await sleep(150);
+      check('T21 重新打开 popup 仍展示录制中面板', !$('st-running').classList.contains('hidden') && $('st-idle').classList.contains('hidden'));
+    } else {
+      check('T21 录制中关闭 popup 不中断/不清空会话（环境未模拟连接，跳过）', true);
+    }
+    // 收尾：停止并清空，避免影响后续运行
+    if (sim.offscreenOpen) { $('stopBtn').click(); await sleep(600); }
+    await resetRecording();
+    await sleep(150);
+
     // ---------- 汇总 ----------
     const summary = $('summary');
     summary.textContent = '总计: ' + (passed + failed) + '  通过: ' + passed + '  失败: ' + failed +

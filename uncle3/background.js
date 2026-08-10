@@ -15,6 +15,8 @@ let session = null;
 let closingOffscreen = false;
 let closeTimer = null;
 let persistTimer = null;
+// popup 长连接引用：用于感知 popup 打开/关闭时机（见下方 chrome.runtime.onConnect）
+let popupPort = null;
 
 async function persistSession() {
   cancelPendingPersist();
@@ -52,6 +54,24 @@ async function restoreSession() {
 }
 // 启动时尝试恢复（不阻塞后续消息处理）
 restoreSession();
+
+// 监听 popup 长连接：用于感知 popup 关闭时机。
+// popup 打开时建立连接，关闭时连接断开（onDisconnect）。若断开时会话处于
+// 终态（完成 done / 出错 error），说明用户已看到“再录一次/关闭”结果面板，
+// 此时清空会话，使下次打开 popup 即回到初始空闲页，而非一直卡在“再录一次”页。
+// 非终态（录制中 / 暂停 / 导出中）一律保留：关闭弹窗不中断录制，需可恢复。
+if (chrome.runtime && chrome.runtime.onConnect) {
+  chrome.runtime.onConnect.addListener(port => {
+    if (port.name !== 'uncle3-popup') return;
+    popupPort = port;
+    port.onDisconnect.addListener(() => {
+      if (popupPort === port) popupPort = null;
+      if (session && (session.state === 'done' || session.state === 'error')) {
+        clearTerminalSession();
+      }
+    });
+  });
+}
 
 async function ensureOffscreen() {
   if (chrome.offscreen.hasDocument) {
@@ -224,23 +244,30 @@ async function handleMessage(msg) {
     }
 
     case 'clearSession': {
-      session = null;
-      clearBadge();
-      await persistSession();
-      notifyPopup();
-      // 先通知 offscreen 丢弃并停止可能仍在进行的录制（如看门狗降级 error 后用户关闭时
-      // 文档仍活着的情况），避免残留录制器/媒体流/tick 定时器占用 offscreen，
-      // 否则后续 OFF_START 会一直「录制器忙」。文档已死时该消息发送失败，忽略即可。
-      try {
-        await chrome.runtime.sendMessage({ type: 'OFF_DISCARD' });
-      } catch (e) { /* 文档不可达，随 closeOffscreen 一并清理 */ }
-      closeOffscreen();
+      await clearTerminalSession();
       return { ok: true };
     }
 
     default:
       return { ok: false, error: 'unknown message type' };
   }
+}
+
+// 清空会话：内存 / storage / 徽标 / 通知一并重置，并通知 offscreen 停止残留录制后关闭文档。
+// “再录一次 / 关闭”按钮（clearSession 消息）与 popup 关闭（onConnect 断开）都会调用：
+// 只要会话处于终态（完成 / 出错）且 popup 被关闭，即清空，使下次打开回到初始页。
+async function clearTerminalSession() {
+  session = null;
+  clearBadge();
+  await persistSession();
+  notifyPopup();
+  // 先通知 offscreen 丢弃并停止可能仍在进行的录制（如看门狗降级 error 后用户关闭时
+  // 文档仍活着的情况），避免残留录制器/媒体流/tick 定时器占用 offscreen，
+  // 否则后续 OFF_START 会一直「录制器忙」。文档已死时该消息发送失败，忽略即可。
+  try {
+    await chrome.runtime.sendMessage({ type: 'OFF_DISCARD' });
+  } catch (e) { /* 文档不可达，随 closeOffscreen 一并清理 */ }
+  closeOffscreen();
 }
 
 function onTime(msg, sendResponse) {
