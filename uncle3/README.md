@@ -2,8 +2,6 @@
 
 窗口尺寸一键调整 + 录制当前页面导出 MP4。
 
-产品需求见仓库根目录 `PRD-Chrome窗口与录制插件.md`。
-
 ## 功能
 
 1. **窗口尺寸调整**
@@ -71,8 +69,8 @@ uncle3/
   npm run lint
   ```
 
-- **持续集成（CI）**：
-  仓库已配置 GitHub Actions CI（`.github/workflows/ci.yml`），支持 Node.js 20 / 22 矩阵自动运行代码检查与全量测试。
+- **持续集成（CI）**（尚未配置，建议后续添加）：
+  可在 `.github/workflows/ci.yml` 增加 GitHub Actions 工作流，于 Node.js 20 / 22 矩阵自动运行 `npm run lint` 与 `npm test`（两者在本地均已可用）。
 
 - **浏览器手动/可视化仿真**：
   可通过本地 HTTP 服务访问各仿真页面，例如：
@@ -94,5 +92,5 @@ uncle3/
   关闭该设置（Chrome 设置 → 下载内容）即可直接下载到默认目录，插件侧无法绕过此浏览器级设置；
 - 录制的是浏览器窗口外框内的标签页画面，分辨率与页面实际渲染一致；
 - 导出大文件（接近 10 分钟上限）时转存内存峰值较高，属预期行为；
-- 未包含 ffmpeg.wasm 二次转码（PRD 方案 B）：现代 Chrome 可 MP4 直出，
+- 未包含 ffmpeg.wasm 二次转码（备选方案）：现代 Chrome 可 MP4 直出，
   不支持时降级 WebM，后续版本可按需补充。
