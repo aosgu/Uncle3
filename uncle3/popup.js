@@ -325,6 +325,14 @@ function bindEvents() {
 }
 
 async function init() {
+  // 建立与 background 的长连接，使其能在 popup 关闭时感知并自动重置终态会话
+  // （见 background.js 的 chrome.runtime.onConnect）：停在“完成 / 出错”结果面板时
+  // 关闭 popup，下次打开即回到初始页；录制中等非终态不受影响（关闭弹窗不中断录制）。
+  // 连接随 popup 卸载而断开，background 据此触发 clearTerminalSession。
+  if (chrome.runtime && chrome.runtime.connect) {
+    chrome.runtime.connect({ name: 'uncle3-popup' });
+  }
+
   const data = await chrome.storage.local.get(['presets', 'customPresets', 'recordAudio', 'exportMp4']);
   presets = normalizePresets(data.presets, data.customPresets);
   if (!Array.isArray(data.presets) || data.presets.length === 0) {
