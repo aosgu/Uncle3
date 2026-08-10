@@ -204,6 +204,7 @@ async function confirmRename(i) {
   const input = $('editName');
   const name = (input.value || '').trim();
   if (!name) { toast('预设名称不能为空'); return; }
+  if (presets.some((p, idx) => idx !== i && p.name === name)) { toast('已存在同名预设'); return; }
   presets[i] = { ...presets[i], name };
   editingIndex = -1;
   await persistPresets();

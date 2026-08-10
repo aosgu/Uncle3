@@ -154,6 +154,8 @@ function updateApplyBtn() {
 
 let uiState = null;
 let restrictedTab = false;
+// 缓存活动标签页，避免 startRecording 中因 await getActiveTab 丢失用户手势
+let cachedTab = null;
 
 function showPanel(id) {
   ['st-idle', 'st-running', 'st-encoding', 'st-done', 'st-error'].forEach(i => {
@@ -175,6 +177,7 @@ function showPanel(id) {
 
 async function checkRestricted() {
   const tab = await getActiveTab();
+  cachedTab = tab || null;
   restrictedTab = !tab || isRestrictedUrl(tab.url);
 }
 
@@ -235,13 +238,17 @@ async function pollRecordState() {
 
 async function startRecording() {
   if (restrictedTab) { toast('该页面类型不支持录制'); return; }
-  const tab = await getActiveTab();
+  // 优先使用缓存的标签页以保住用户手势：chrome.tabCapture.getMediaStreamId 要求在
+  // 用户手势同步上下文中调用，await 会使手势失效；此处先用 cachedTab 同步拿到 tabId
+  const tab = cachedTab || await getActiveTab();
   if (!tab) { toast('未找到当前标签页'); return; }
+  // 同步更新缓存，保证后续调用仍新鲜
+  cachedTab = tab;
 
   uiState = 'requesting';
   renderRecordState(null);
   try {
-    // tabCapture 必须在用户手势上下文中立即调用
+    // tabCapture 必须在用户手势上下文中立即调用（保持在 click 同步链中，中间不穿插其他 await）
     const streamId = await chrome.tabCapture.getMediaStreamId({ targetTabId: tab.id });
     const { fixedFps30 } = await chrome.storage.local.get('fixedFps30');
     const resp = await bgSend({

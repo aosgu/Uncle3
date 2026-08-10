@@ -127,6 +127,7 @@ export default [
         // Functions from popup / settings / core
         init: "readonly",
         resetRecording: "readonly",
+        pollRecordState: "readonly",
         toggleSaveForm: "readonly",
         confirmSavePreset: "readonly",
         normalizePresets: "readonly",

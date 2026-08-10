@@ -33,7 +33,11 @@ function presetKey(p) { return p.w + 'x' + p.h; }
  * 合入时按尺寸（presetKey）去重，避免旧版自定义过与内置同尺寸时出现重复条目。
  */
 function normalizePresets(stored, legacyCustom) {
-  if (Array.isArray(stored) && stored.length > 0) return stored.slice();
+  if (Array.isArray(stored) && stored.length > 0) {
+    // 容错：过滤被外部篡改的脏数据，仅保留含合法 w/h 的条目
+    const valid = stored.filter(p => p && typeof p.name === 'string' && Number.isInteger(p.w) && Number.isInteger(p.h));
+    if (valid.length > 0) return valid.slice();
+  }
   const legacy = Array.isArray(legacyCustom) ? legacyCustom : [];
   const base = DEFAULT_PRESETS.map(p => ({ name: p.name, w: p.w, h: p.h }));
   const seen = base.map(p => presetKey(p));
@@ -75,7 +79,7 @@ function isRestrictedUrl(url) {
     'edge:', 'about:', 'view-source:', 'devtools:', 'file:'
   ];
   if (restrictedSchemes.some(s => url.startsWith(s))) return true;
-  if (/^https:\/\/(chrome\.google\.com\/webstore|chromewebstore\.google\.com)/.test(url)) return true;
+  if (/^https:\/\/(chrome\.google\.com\/webstore|chromewebstore\.google\.com)(\/|$|\?|#)/.test(url)) return true;
   return false;
 }
 
